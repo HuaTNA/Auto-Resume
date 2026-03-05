@@ -1,0 +1,28 @@
+Customer Developer, Cloud AI, Startups, Google Cloud
+Google
+San Francisco, CA, USA; Toronto, ON, Canada; +7 more
+
+Minimum qualifications:
+Bachelor's degree or equivalent practical experience.
+1 year of experience with cloud native architecture in a customer-facing or support role.
+Experience with AI agent orchestration frameworks (e.g., LangGraph, CrewAI, AutoGen), agentic design patterns (e.g., tool-use, multi-agent collaboration), and integrating models into autonomous workflows via advanced API prompting and Retrieval-augmented generation (RAG).
+Experience with machine learning model development and deployment.
+Experience engaging with, and presenting to, technical stakeholders and executive leaders.
+Experience with programming or technical proficiencies to demo, prototype, or workshop with customers.
+
+Preferred qualifications:
+Master's degree in Computer Science, Engineering, Mathematics, a technical field, or equivalent practical experience.
+Experience in building machine learning solutions and leveraging specific machine learning architectures (e.g. deep learning, LSTM, convolutional networks).
+Experience working with startups.
+Experience with frameworks for deep learning (e.g., PyTorch, Tensor Flow, Jax, Ray, etc.), AI accelerators (e.g., TPUs, GPUs), model architectures (e.g., encoders, decoders, transformers), or using machine learning APIs.
+Ability to learn, understand, and work with new emerging technologies, methodologies, and solutions in the cloud/IT technology space.
+
+About the job:
+When leading companies choose Google Cloud, it's a huge win for spreading the power of cloud computing globally. Once educational institutions, government agencies, and other businesses sign on to use Google Cloud products, you come in to facilitate making their work more productive, mobile, and collaborative. You listen and deliver what is most helpful for the customer. You assist fellow sales Googlers by problem-solving key technical issues for our customers. You liaise with the product marketing management and engineering teams to stay on top of industry trends and devise enhancements to Google Cloud products.
+
+In this role, you will partner with technical business teams to differentiate Google Cloud to our customers. You will serve as a technical expert responsible for accelerating technical wins and adoption of specialized workloads. You will leverage your ability in product areas, in partnership with Platform CEs, to develop prototypes, proofs-of-concept, and demos to promote new, highly specialized solutions to customers. You will solve AI-centered customer issues and provide a critical feedback loop to influence product development. You will have excellent organizational, communication, and presentation skills, engaging with customers to understand their business and technical requirements, and persuasively present practical and useful solutions on Google Cloud. You will blend business prowess, market knowledge, and technical engagement to prove the value of the Google Cloud portfolio.
+
+Responsibilities:
+Build partner specific, go-to-market solutions to reduce business cycles and drive partner business as measured through pipeline and business growth.
+Own the technical relationship with partners, empowering them to drive a successful pilot or proof-of-concept, support partners drive toward customer acceptance of the technical proposal, leading to an agreement, and work with partners during the migration phase to assure they have all the tools necessary to deliver a successful deployment.
+Build trusted advisory relationships and make recommendations on integration strategies, enterprise architectures, platforms, and application infrastructure required to successfully implement a complete solution providing best practice advice to customers to optimize Google Cloud effectiveness.

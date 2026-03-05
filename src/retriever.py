@@ -39,7 +39,7 @@ def retrieve_relevant_content(profile: dict, jd_analysis: dict, client: anthropi
     bullets_str = json.dumps(all_bullets, indent=2)
     jd_str = json.dumps(jd_analysis, indent=2)
 
-    prompt = f"""You are a resume expert. Select the {top_k} most relevant experience bullets for this job.
+    prompt = f"""You are a senior resume strategist. Select the {top_k} most relevant experience bullets for this job.
 
 JOB ANALYSIS:
 {jd_str}
@@ -47,13 +47,34 @@ JOB ANALYSIS:
 ALL AVAILABLE BULLETS:
 {bullets_str}
 
-Instructions:
-- Select the {top_k} bullets that best match the job requirements
-- Prioritize bullets that demonstrate required skills, key responsibilities, and ATS keywords
-- Return ONLY a JSON array of the selected bullet IDs, ranked by relevance (most relevant first)
-- Example: ["b001", "b004", "p001", ...]
+SELECTION STRATEGY — follow this priority order:
 
-Return ONLY the JSON array, nothing else."""
+1. DEAL-BREAKER MATCH (highest priority):
+   Bullets that directly prove the candidate meets "deal_breakers" and "required_skills".
+   e.g., if JD requires "RAG experience", a bullet about building a RAG system is a must-include.
+
+2. RESPONSIBILITY MIRROR:
+   Bullets where the candidate DID what the JD ASKS them to do.
+   e.g., if JD says "build prototypes and demos for customers", include bullets about building demos/POCs.
+
+3. KEYWORD DENSITY:
+   Bullets that naturally contain multiple "ats_keywords" from the JD.
+   More keyword overlap = higher priority.
+
+4. SOFT REQUIREMENT PROOF:
+   Bullets that demonstrate "soft_requirements" (customer-facing, collaboration, presentation).
+   These often differentiate candidates at the interview stage.
+
+5. BONUS SIGNAL MATCH:
+   Bullets that cover "bonus_signals" / "preferred_skills".
+
+IMPORTANT:
+- Do NOT over-index on one category. A good resume needs breadth across all 5 strategies.
+- Include at least 1 bullet that proves soft skills / stakeholder engagement if available.
+- Prefer bullets with quantified impact (numbers, percentages, scale).
+
+Return ONLY a JSON array of the selected bullet IDs, ranked by relevance (most relevant first).
+Example: ["b001", "b004", "p001", ...]"""
 
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
