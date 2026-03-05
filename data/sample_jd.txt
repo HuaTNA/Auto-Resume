@@ -1,0 +1,30 @@
+Machine Learning Engineer – LLM Applications
+Cohere | Toronto, ON (Hybrid)
+
+About the Role:
+We're looking for a Machine Learning Engineer to join our Applied AI team, building production LLM-powered applications and integrations for enterprise clients. You'll work across the full stack of AI development — from model integration and prompt engineering to backend APIs and data pipelines.
+
+Responsibilities:
+- Design and build LLM-powered pipelines and applications using Cohere's APIs
+- Develop and optimize prompts, RAG systems, and retrieval pipelines
+- Build and maintain REST APIs and backend services in Python
+- Work with cloud infrastructure (GCP or AWS) to deploy and scale AI services
+- Collaborate with ML researchers to productionize models
+- Integrate with external data sources, databases, and third-party APIs
+
+Requirements:
+- Strong Python skills (2+ years)
+- Experience with LLM APIs (OpenAI, Anthropic, Cohere, or similar)
+- Familiarity with RAG architectures, vector databases, or semantic search
+- Experience building REST APIs (FastAPI, Flask, or similar)
+- Understanding of cloud platforms (GCP preferred)
+- Strong problem-solving and communication skills
+
+Nice to Have:
+- Experience with Next.js or React for demo/internal tooling
+- Familiarity with SQL databases
+- Experience with embeddings and vector search
+- Knowledge of MLOps practices
+
+Why Join Us:
+Cohere is building the future of enterprise AI. You'll work on impactful problems, ship fast, and grow alongside a world-class team.
