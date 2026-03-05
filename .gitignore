@@ -4,4 +4,3 @@ output/
 .env
 .venv/
 data/profile.json
-data/google_cloud_ai_jd.txt
