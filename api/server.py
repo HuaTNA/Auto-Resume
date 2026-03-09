@@ -58,6 +58,20 @@ def _get_cors_origins() -> list[str]:
     return defaults
 
 
+def _cors_allow_origin_regex() -> str | None:
+    """
+    Return a regex that matches all Vercel preview deployment URLs
+    for the project owner, plus any custom pattern from env.
+    """
+    patterns = [
+        r"https://auto-resume[a-z0-9\-]*\.vercel\.app",
+    ]
+    extra = os.environ.get("CORS_ORIGIN_REGEX", "").strip()
+    if extra:
+        patterns.append(extra)
+    return "|".join(patterns)
+
+
 def _get_output_root() -> Path:
     """
     Where generated files are written.
@@ -76,6 +90,7 @@ app = FastAPI(title="AI Resume Generator API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_get_cors_origins(),
+    allow_origin_regex=_cors_allow_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
