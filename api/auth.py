@@ -62,14 +62,35 @@ def decode_token(token: str) -> dict:
     return jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
 
 
+def _env_true(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _cookie_settings() -> tuple[bool, str]:
+    """
+    Resolve cookie settings from environment.
+    """
+    # Keep compatibility with older PRODUCTION flag, but prefer explicit vars.
+    default_secure = _env_true("COOKIE_SECURE", _env_true("PRODUCTION", _env_true("VERCEL", False)))
+    samesite_default = "none" if default_secure else "lax"
+    samesite = os.environ.get("COOKIE_SAMESITE", samesite_default).strip().lower()
+    if samesite not in ("lax", "strict", "none"):
+        samesite = samesite_default
+    return default_secure, samesite
+
+
 def set_auth_cookie(response: Response, token: str):
-    """Set the auth cookie on the response (httpOnly, SameSite=Lax)."""
+    """Set the auth cookie on the response."""
+    secure, samesite = _cookie_settings()
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        samesite="lax",
-        secure=False,  # Set to True in production with HTTPS
+        samesite=samesite,
+        secure=secure,
         max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
         path="/",
     )

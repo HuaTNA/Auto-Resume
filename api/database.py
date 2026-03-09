@@ -5,6 +5,7 @@ Uses SQLite at data/auto_resume.db (zero infra, works on Windows).
 """
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Generator
@@ -14,14 +15,35 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker, Session
 
-DB_PATH = Path(__file__).parent.parent / "data" / "auto_resume.db"
-DB_URL = f"sqlite:///{DB_PATH}"
 
-engine = create_engine(
-    DB_URL,
-    connect_args={"check_same_thread": False},  # Required for FastAPI threading
-    echo=False,
-)
+def _build_db_url() -> str:
+    """
+    Resolve DB URL from env when available.
+    Falls back to local SQLite for development.
+    """
+    env_url = os.environ.get("DATABASE_URL", "").strip()
+    if env_url:
+        # SQLAlchemy expects postgresql:// instead of legacy postgres://
+        if env_url.startswith("postgres://"):
+            return env_url.replace("postgres://", "postgresql://", 1)
+        return env_url
+
+    if os.environ.get("VERCEL", "").strip() == "1":
+        sqlite_path = Path("/tmp/auto_resume.db")
+    else:
+        sqlite_path = Path(__file__).parent.parent / "data" / "auto_resume.db"
+    return f"sqlite:///{sqlite_path}"
+
+
+DB_URL = _build_db_url()
+IS_SQLITE = DB_URL.startswith("sqlite")
+
+engine_kwargs = {"echo": False}
+if IS_SQLITE:
+    # Required for FastAPI threading with SQLite.
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(DB_URL, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -97,7 +119,9 @@ class HistoryRecord(Base):
 
 def init_db():
     """Create all tables if they don't exist."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if IS_SQLITE:
+        sqlite_path = Path(DB_URL.replace("sqlite:///", "", 1))
+        sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
 
 

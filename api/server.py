@@ -36,11 +36,46 @@ from api.database import HistoryRecord, Profile, User, get_db, init_db
 from api.dependencies import get_current_user
 from api.routes.auth import router as auth_router
 
+
+def _get_cors_origins() -> list[str]:
+    """
+    Resolve CORS origins from env.
+    Priority:
+    1) CORS_ORIGINS (comma-separated)
+    2) local defaults + optional VERCEL_FRONTEND_URL
+    """
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    if raw:
+        return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+
+    defaults = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ]
+    vercel_frontend = os.environ.get("VERCEL_FRONTEND_URL", "").strip()
+    if vercel_frontend:
+        defaults.append(vercel_frontend.rstrip("/"))
+    return defaults
+
+
+def _get_output_root() -> Path:
+    """
+    Where generated files are written.
+    On Vercel, default to /tmp because project files are read-only.
+    """
+    configured = os.environ.get("OUTPUT_DIR", "").strip()
+    if configured:
+        return Path(configured)
+    if os.environ.get("VERCEL", "").strip() == "1":
+        return Path("/tmp/output")
+    return Path("output")
+
+
 app = FastAPI(title="AI Resume Generator API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -151,6 +186,16 @@ class StatusUpdate(BaseModel):
 
 
 # ========== Endpoints ==========
+
+@app.get("/")
+def root():
+    return {
+        "name": "AI Resume Generator API",
+        "status": "ok",
+        "health": "/api/health",
+        "docs": "/docs",
+    }
+
 
 @app.get("/api/health")
 def health():
@@ -519,8 +564,8 @@ def api_generate_full(
     if data.generate_cover_letter:
         cover_letter = generate_cover_letter(filtered_profile, jd_analysis, client)
 
-    # Save output files under output/{user_id}/
-    output_dir = Path("output") / str(current_user.id)
+    # Save output files under OUTPUT_DIR/{user_id}/
+    output_dir = _get_output_root() / str(current_user.id)
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     raw_title = jd_analysis.get("job_title", "resume")
