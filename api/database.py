@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Generator
 
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint, create_engine
+    Column, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint, create_engine, text
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker, Session
 
@@ -128,12 +128,30 @@ class HistoryRecord(Base):
         }
 
 
+def _sync_sequences():
+    """
+    Sync PostgreSQL serial sequences with actual max IDs.
+    Prevents duplicate key errors when rows were inserted without the sequence.
+    """
+    if IS_SQLITE:
+        return
+    tables = ["users", "profiles", "history_records"]
+    with engine.connect() as conn:
+        for table in tables:
+            seq_name = f"{table}_id_seq"
+            conn.execute(text(
+                f"SELECT setval('{seq_name}', COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false)"
+            ))
+        conn.commit()
+
+
 def init_db():
     """Create all tables if they don't exist."""
     if IS_SQLITE:
         sqlite_path = Path(DB_URL.replace("sqlite:///", "", 1))
         sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    _sync_sequences()
 
 
 def get_db() -> Generator[Session, None, None]:
