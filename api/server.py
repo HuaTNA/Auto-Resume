@@ -199,7 +199,9 @@ def root():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    from api.database import DB_URL, IS_SQLITE
+    db_type = "sqlite" if IS_SQLITE else "postgresql"
+    return {"status": "ok", "db": db_type, "db_url_prefix": DB_URL[:30] + "..."}
 
 
 @app.get("/api/profile")
