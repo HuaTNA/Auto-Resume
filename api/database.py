@@ -20,6 +20,7 @@ def _build_db_url() -> str:
     """
     Resolve DB URL from env when available.
     Falls back to local SQLite for development.
+    Supports individual DB_* vars as fallback for passwords with special chars.
     """
     env_url = os.environ.get("DATABASE_URL", "").strip()
     if env_url:
@@ -27,6 +28,16 @@ def _build_db_url() -> str:
         if env_url.startswith("postgres://"):
             return env_url.replace("postgres://", "postgresql://", 1)
         return env_url
+
+    # Build from individual parts (handles special chars in password)
+    db_host = os.environ.get("DB_HOST", "").strip()
+    if db_host:
+        from urllib.parse import quote_plus
+        db_user = os.environ.get("DB_USER", "postgres")
+        db_pass = quote_plus(os.environ.get("DB_PASSWORD", ""))
+        db_port = os.environ.get("DB_PORT", "5432")
+        db_name = os.environ.get("DB_NAME", "postgres")
+        return f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
     if os.environ.get("VERCEL", "").strip() == "1":
         sqlite_path = Path("/tmp/auto_resume.db")
