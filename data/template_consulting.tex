@@ -1,0 +1,75 @@
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tabularx}
+\usepackage[usenames,dvipsnames]{color}
+\input{glyphtounicode}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Standard consulting margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\textwidth}{1.0in}
+\addtolength{\topmargin}{-0.5in}
+\addtolength{\textheight}{1.2in}
+
+% Clean serif-style section headers
+\titleformat{\section}{
+  \vspace{-4pt}\raggedright\large\bfseries
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% Custom commands
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+  \begin{tabular*}{1.0\textwidth}[t]{l@{\extracolsep{\fill}}r}
+  \textbf{#1} & \textbf{\small #2} \\
+  \textit{\small#3} & \textit{\small #4} \\
+  \end{tabular*}\vspace{-6pt}
+}
+\newcommand{\resumeItem}[1]{\item\small{#1 \vspace{-2pt}}}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in]}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\begin{document}
+
+% ---------- HEADER ----------
+\begin{center}
+    {\LARGE \bfseries {{NAME}} } \\[4pt]
+    \small {{LOCATION}} $|$
+    {{PHONE}} $|$
+    \href{mailto:{{EMAIL}}}{{{EMAIL}}} $|$
+    \href{{{LINKEDIN_URL}}}{LinkedIn} $|$
+    \href{{{GITHUB_URL}}}{GitHub}
+\end{center}
+
+% ---------- EDUCATION ----------
+\section{Education}
+\resumeSubHeadingListStart
+  {{EDUCATION_ENTRIES}}
+\resumeSubHeadingListEnd
+
+% ---------- EXPERIENCE ----------
+\section{Professional Experience}
+\resumeSubHeadingListStart
+  {{EXPERIENCE_ENTRIES}}
+\resumeSubHeadingListEnd
+
+% ---------- PROJECTS ----------
+\section{Selected Projects}
+\resumeSubHeadingListStart
+  {{PROJECT_ENTRIES}}
+\resumeSubHeadingListEnd
+
+% ---------- TECHNICAL SKILLS ----------
+\section{Skills \& Interests}
+\resumeItemListStart
+  {{SKILLS_ENTRIES}}
+\resumeItemListEnd
+
+\end{document}

@@ -1,0 +1,75 @@
+\documentclass[letterpaper,10pt]{article}
+
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tabularx}
+\usepackage[usenames,dvipsnames]{color}
+\input{glyphtounicode}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Tighter margins for more content
+\addtolength{\oddsidemargin}{-0.7in}
+\addtolength{\textwidth}{1.4in}
+\addtolength{\topmargin}{-0.7in}
+\addtolength{\textheight}{1.6in}
+
+% Modern section format with blue accent
+\titleformat{\section}{
+  \vspace{-6pt}\scshape\raggedright\large\bfseries\color{MidnightBlue}
+}{}{0em}{}[\color{MidnightBlue}\titlerule \vspace{-5pt}]
+
+% Custom commands
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+  \begin{tabular*}{1.0\textwidth}[t]{l@{\extracolsep{\fill}}r}
+  \textbf{#1} & \textbf{\small #2} \\
+  \textit{\small#3} & \textit{\small #4} \\
+  \end{tabular*}\vspace{-6pt}
+}
+\newcommand{\resumeItem}[1]{\item\small{#1 \vspace{-2pt}}}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in]}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\begin{document}
+
+% ---------- HEADER ----------
+\begin{center}
+    {\LARGE \scshape \bfseries {{NAME}} } \\[3pt]
+    {{LOCATION}} $\mid$
+    {{PHONE}} $\mid$
+    \href{mailto:{{EMAIL}}}{{{EMAIL}}} $\mid$
+    \href{{{LINKEDIN_URL}}}{LinkedIn} $\mid$
+    \href{{{GITHUB_URL}}}{GitHub}
+\end{center}
+
+% ---------- EDUCATION ----------
+\section{Education}
+\resumeSubHeadingListStart
+  {{EDUCATION_ENTRIES}}
+\resumeSubHeadingListEnd
+
+% ---------- TECHNICAL SKILLS ----------
+\section{Technical Skills}
+\resumeItemListStart
+  {{SKILLS_ENTRIES}}
+\resumeItemListEnd
+
+% ---------- EXPERIENCE ----------
+\section{Professional Experience}
+\resumeSubHeadingListStart
+  {{EXPERIENCE_ENTRIES}}
+\resumeSubHeadingListEnd
+
+% ---------- PROJECTS ----------
+\section{Projects}
+\resumeSubHeadingListStart
+  {{PROJECT_ENTRIES}}
+\resumeSubHeadingListEnd
+
+\end{document}

@@ -9,6 +9,8 @@ from pathlib import Path
 
 import anthropic
 
+from src.templates import get_template
+
 TEMPLATE_PATH = Path(__file__).parent.parent / "data" / "template.tex"
 
 SYSTEM_PROMPT = r"""You are an expert resume writer specializing in tech roles.
@@ -27,12 +29,13 @@ CRITICAL RULES — follow these without exception:
 10. End each \resumeItem with a period."""
 
 
-def generate_resume(filtered_profile: dict, jd_analysis: dict, client: anthropic.Anthropic) -> str:
+def generate_resume(filtered_profile: dict, jd_analysis: dict, client: anthropic.Anthropic,
+                    template_name: str = None) -> str:
     """
     Generate a tailored resume in LaTeX format using the template.
     """
 
-    template = TEMPLATE_PATH.read_text(encoding="utf-8")
+    template = get_template(template_name)
     profile_str = json.dumps(filtered_profile, indent=2)
     jd_str = json.dumps(jd_analysis, indent=2)
 

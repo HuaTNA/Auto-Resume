@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #4051b5;
+  --color-primary-light: rgba(64, 81, 181, 0.1);
+  --color-background: #f6f6f8;
+  --color-background-dark: #14161e;
+  --font-sans: "Inter", sans-serif;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+}
+
+.latex-font {
+  font-family: "Times New Roman", Times, serif;
+}
