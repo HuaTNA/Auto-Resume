@@ -173,8 +173,11 @@ export async function saveHistory(
   });
 }
 
-export async function importProfileFromFile() {
-  return fetchAPI("/api/profile/import-file", { method: "POST" });
+export async function importProfileFromFile(data: Record<string, unknown>) {
+  return fetchAPI("/api/profile/import-upload", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getHistoryRecord(recordId: number) {

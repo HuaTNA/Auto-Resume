@@ -281,6 +281,28 @@ def import_profile_from_file(
     }
 
 
+@app.post("/api/profile/import-upload")
+def import_profile_upload(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Import profile from uploaded JSON data into the current user's DB profile."""
+    _save_profile_db(current_user, db, payload)
+
+    total_bullets = sum(len(e.get("bullets", [])) for e in payload.get("experiences", []))
+    total_bullets += sum(len(p.get("bullets", [])) for p in payload.get("projects", []))
+
+    return {
+        "ok": True,
+        "imported": {
+            "experiences": len(payload.get("experiences", [])),
+            "projects": len(payload.get("projects", [])),
+            "total_bullets": total_bullets,
+        },
+    }
+
+
 @app.put("/api/profile/personal")
 def update_personal(
     data: dict,

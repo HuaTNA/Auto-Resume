@@ -85,19 +85,30 @@ export default function ProfilePage() {
   }
 
   async function handleImportFile() {
-    if (!confirm("Import from data/profile.json? This will overwrite your current profile.")) return;
-    setImporting(true);
-    try {
-      const result = await importProfileFromFile();
-      await loadProfile();
-      alert(
-        `Imported ${result.imported.experiences} experiences, ${result.imported.projects} projects, ${result.imported.total_bullets} bullets.`
-      );
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Import failed");
-    } finally {
-      setImporting(false);
-    }
+    // Create a hidden file input to let the user pick a JSON file
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!confirm(`Import from "${file.name}"? This will overwrite your current profile.`)) return;
+      setImporting(true);
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const result = await importProfileFromFile(data);
+        await loadProfile();
+        alert(
+          `Imported ${result.imported.experiences} experiences, ${result.imported.projects} projects, ${result.imported.total_bullets} bullets.`
+        );
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "Import failed");
+      } finally {
+        setImporting(false);
+      }
+    };
+    input.click();
   }
 
   async function handleSavePersonal() {
