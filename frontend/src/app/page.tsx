@@ -1,505 +1,84 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { getHistory, updateHistoryStatus, getHistoryRecord, compilePdf, compileCoverLetterPdf } from "@/lib/api";
+import { EmptyState, Section, StatusPill, WorkspacePage } from "@/components/workspace/WorkspaceUI";
+import { BirchIcon } from "@/components/icons/BirchIcons";
+import { getHealth, getHistory } from "@/lib/api";
+import { useLanguage } from "@/lib/language-context";
+import { useWorkspace } from "@/lib/workspace-context";
 
-interface HistoryRecord {
-  id: number;
-  timestamp: string;
-  job_title: string;
-  company: string;
-  seniority: string;
-  template: string;
-  ats_scores: {
-    overall: number | null;
-    keyword_pct: number | null;
-    relevance: number | null;
-    impact: number | null;
-  };
-  status: string;
-  has_resume: boolean;
-  has_cover_letter: boolean;
-}
+interface CareerRecord { id: number; job_title: string; company: string; status: string; timestamp: string; ats_scores: { overall: number | null } }
+function dateKey(offset = 0) { const date = new Date(); date.setDate(date.getDate() + offset); return date.toLocaleDateString("en-CA"); }
 
-interface RecordDetail {
-  resume_tex: string;
-  cover_letter: string;
-}
-
-interface Stats {
-  total: number;
-  avg_score: number;
-  best_score: number;
-  by_status: Record<string, number>;
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  generated: "bg-blue-100 text-blue-800",
-  applied: "bg-green-100 text-green-800",
-  interview: "bg-purple-100 text-purple-800",
-  offer: "bg-emerald-100 text-emerald-800",
-  rejected: "bg-red-100 text-red-800",
-};
-
-const STATUS_OPTIONS = ["generated", "applied", "interview", "offer", "rejected"];
-
-export default function Dashboard() {
-  const [records, setRecords] = useState<HistoryRecord[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [detail, setDetail] = useState<RecordDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailTab, setDetailTab] = useState<"resume" | "cover">("resume");
-  const [pdfLoading, setPdfLoading] = useState<"resume" | "cover" | null>(null);
-  const [pdfError, setPdfError] = useState("");
+export default function CommandCenter() {
+  const { tasks, projects, knowledge, activities, updateTask, isLoading } = useWorkspace();
+  const { text, language } = useLanguage();
+  const [career, setCareer] = useState<CareerRecord[]>([]);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const today = dateKey();
 
   useEffect(() => {
-    loadHistory();
+    getHistory().then((result) => setCareer(result.records ?? [])).catch(() => setCareer([]));
+    getHealth().then(() => setBackendOnline(true)).catch(() => setBackendOnline(false));
   }, []);
 
-  async function loadHistory() {
-    try {
-      const data = await getHistory();
-      setRecords(data.records);
-      setStats(data.stats);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load history");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const todayTasks = tasks.filter((task) => task.status === "todo" && (!task.due_date || task.due_date === today)).slice(0, 5);
+  const upcoming = tasks.filter((task) => task.status === "todo" && task.due_date && task.due_date > today).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 4);
+  const activeProjects = projects.filter((project) => project.status === "active" || project.status === "blocked").slice(0, 3);
+  const activeApplications = career.filter((record) => ["generated", "applied", "interview"].includes(record.status)).slice(0, 3);
+  const suggestions = useMemo(() => {
+    const items: Array<{ title: string; detail: string; href: string }> = [];
+    const overdue = tasks.filter((task) => task.status === "todo" && task.due_date && task.due_date < today).length;
+    if (overdue) items.push({ title: text(`先处理 ${overdue} 项逾期任务`, `Review ${overdue} overdue task${overdue > 1 ? "s" : ""}`), detail: text("清理过期承诺，再决定今天新增什么。", "Clear old commitments before adding new work."), href: "/tasks?view=all" });
+    const needsNext = projects.find((project) => project.status === "active" && !project.next_action);
+    if (needsNext) items.push({ title: text(`为「${needsNext.title}」定义下一步`, `Define the next action for “${needsNext.title}”`), detail: text("活跃项目最好始终有一个可执行动作。", "Every active project should have one concrete next action."), href: "/projects" });
+    const interviews = career.filter((record) => record.status === "interview").length;
+    if (interviews) items.push({ title: text(`准备 ${interviews} 项面试`, `Prepare for ${interviews} interview${interviews > 1 ? "s" : ""}`), detail: text("把职位语境、故事和问题整理到一起。", "Bring role context, stories, and questions together."), href: "/career/interview" });
+    if (!items.length) items.push({ title: text("工作区状态清晰", "Your workspace is clear"), detail: text("选择一个最重要的结果，并把它拆成今天的一步。", "Choose one meaningful outcome and turn it into one step for today."), href: "/tasks?new=1" });
+    return items.slice(0, 3);
+  }, [career, projects, tasks, text, today]);
 
-  async function handleStatusChange(recordId: number, newStatus: string) {
-    try {
-      await updateHistoryStatus(recordId, newStatus);
-      setRecords((prev) =>
-        prev.map((r) => (r.id === recordId ? { ...r, status: newStatus } : r))
-      );
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to update status");
-    }
-  }
+  return <>
+    <Header eyebrow={{ zh: "个人 AI 工作站", en: "PERSONAL AI WORKSPACE" }} title={{ zh: "指挥中心", en: "Command Center" }} subtitle={{ zh: "今天要处理的事，以及整个工作区正在发生的变化。", en: "What needs your attention today, across the whole workspace." }} action={<button onClick={() => window.dispatchEvent(new Event("hua-command-palette"))} className="secondary-button hidden sm:inline-flex"><BirchIcon name="growth-ring" size={16} />⌘K</button>} />
+    <WorkspacePage>
+      <section className="relative z-10 rounded-[14px] bg-[#1E1A14] px-6 py-6 shadow-[0_2px_8px_rgba(30,26,20,0.05)] sm:px-8 sm:py-7">
+        <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-[14px]" aria-hidden="true"><BirchIcon name="branch" size={170} className="absolute -bottom-12 -right-4 hidden opacity-[0.08] brightness-[4] sm:block" /></span>
+        <div className="relative z-10 max-w-3xl"><p className="latin text-[9px] font-normal uppercase tracking-[0.34em] text-[#B8A98A]">Think · Build · Move forward</p><h1 className="latin mt-3 max-w-3xl text-2xl font-normal leading-[1.2] tracking-[0.025em] text-[#F5EFE0] sm:text-[34px]">Your personal workspace for thinking, building, and moving work forward.</h1><p className="latin mt-3 max-w-2xl text-sm leading-[1.6] text-[#B8A98A]">Bring projects, career goals, documents, knowledge, and automations into one AI-powered command center.</p>
+          <div className="mt-5 flex flex-wrap gap-2.5"><Link href="/copilot" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[#F5EFE0] bg-[#F5EFE0] px-4 text-[12px] text-[#1E1A14] transition-transform hover:-translate-y-0.5"><BirchIcon name="leaf" size={15} />{text("询问 AI 助手", "Ask Copilot")}</Link><div className="relative"><button onClick={() => setCreateOpen((open) => !open)} aria-expanded={createOpen} aria-haspopup="menu" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[rgba(245,239,224,0.25)] bg-[rgba(245,239,224,0.08)] px-4 text-[12px] text-[#F5EFE0] hover:bg-[rgba(245,239,224,0.14)]"><span aria-hidden="true">＋</span>{text("新建", "Create New")}<span aria-hidden="true">⌄</span></button>{createOpen && <div role="menu" className="absolute left-0 top-[calc(100%+8px)] z-30 w-52 rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] p-2 shadow-[0_16px_48px_rgba(30,26,20,0.16),0_4px_16px_rgba(30,26,20,0.08)]">{[{ href: "/projects?new=1", zh: "项目", en: "Project" }, { href: "/tasks?new=1", zh: "任务", en: "Task" }, { href: "/knowledge?new=1", zh: "知识内容", en: "Knowledge item" }, { href: "/generate", zh: "职业文档", en: "Career document" }].map((item) => <Link key={item.href} href={item.href} role="menuitem" onClick={() => setCreateOpen(false)} className="block rounded-[6px] px-3 py-2 text-xs hover:bg-[#FDFAF3]">{item[language]}</Link>)}</div>}</div><Link href="/tasks" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[rgba(245,239,224,0.25)] bg-[rgba(245,239,224,0.08)] px-4 text-[12px] text-[#F5EFE0] hover:bg-[rgba(245,239,224,0.14)]"><BirchIcon name="catkin" size={15} className="brightness-[4]" />{text("打开今天", "Open Today")}</Link></div>
+        </div>
+      </section>
 
-  async function handleExpand(recordId: number) {
-    if (expandedId === recordId) {
-      setExpandedId(null);
-      setDetail(null);
-      return;
-    }
-    setExpandedId(recordId);
-    setDetail(null);
-    setDetailTab("resume");
-    setDetailLoading(true);
-    setPdfError("");
-    try {
-      const data = await getHistoryRecord(recordId);
-      setDetail({
-        resume_tex: data.record.resume_tex || "",
-        cover_letter: data.record.cover_letter || "",
-      });
-    } catch {
-      setDetail({ resume_tex: "", cover_letter: "" });
-    } finally {
-      setDetailLoading(false);
-    }
-  }
+      <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="space-y-5">
+          <Section title={text("今天", "Today")} eyebrow={new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-CA", { weekday: "long", month: "long", day: "numeric" }).format(new Date())} action={<Link href="/tasks" className="text-xs text-[#1E1A14] underline decoration-[#B8A98A] underline-offset-4">{text("查看全部", "View all")} →</Link>}>
+            {isLoading ? <div className="h-32 animate-pulse rounded-[16px] bg-[rgba(30,26,20,0.05)]" /> : todayTasks.length === 0 ? <EmptyState icon="catkin" title={text("今天还没有安排", "Nothing scheduled for today")} description={text("保留空白，或添加一个最重要的下一步。", "Keep the space open, or add the one next action that matters.")} action={{ label: text("添加任务", "Add a task"), href: "/tasks?new=1" }} /> : <div className="overflow-hidden rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0]">{todayTasks.map((task, index) => <div key={task.id} className={`flex items-center gap-4 p-4 ${index ? "border-t border-[rgba(30,26,20,0.12)]" : ""}`}><button onClick={() => updateTask(task.id, { status: "done" })} aria-label={text("完成", "Complete")} className="flex size-6 items-center justify-center rounded-[6px] border border-[rgba(30,26,20,0.12)] bg-[#FDFAF3]"><BirchIcon name="bud" size={14} /></button><span className="min-w-0 flex-1 truncate text-sm">{task.title}</span><StatusPill tone={task.priority === "high" ? "warning" : "neutral"}>{task.priority}</StatusPill></div>)}</div>}
+          </Section>
 
-  function downloadFile(content: string, filename: string, type = "text/plain") {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleDownloadPdf(type: "resume" | "cover", filename: string) {
-    setPdfLoading(type);
-    setPdfError("");
-    try {
-      const result =
-        type === "resume"
-          ? await compilePdf(detail!.resume_tex)
-          : await compileCoverLetterPdf(detail!.cover_letter);
-      if (result.ok) {
-        const bytes = Uint8Array.from(atob(result.pdf_base64), (c) => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        setPdfError(result.error || "PDF compilation failed");
-      }
-    } catch (e) {
-      setPdfError(e instanceof Error ? e.message : "PDF compilation failed");
-    } finally {
-      setPdfLoading(null);
-    }
-  }
-
-  return (
-    <>
-      <Header
-        title="Resume Dashboard"
-        action={
-          <Link
-            href="/generate"
-            className="bg-[#4051b5] hover:bg-[#4051b5]/90 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-all"
-          >
-            <span className="material-symbols-outlined text-[20px]">add</span>
-            New Resume
-          </Link>
-        }
-      />
-
-      <div className="p-8 max-w-7xl mx-auto w-full">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatCard
-            icon="article"
-            iconBg="bg-indigo-50 text-indigo-600"
-            label="Total Resumes"
-            value={stats?.total ?? 0}
-          />
-          <StatCard
-            icon="speed"
-            iconBg="bg-green-50 text-green-600"
-            label="Avg. ATS Score"
-            value={stats?.avg_score ? `${stats.avg_score}%` : "N/A"}
-          />
-          <StatCard
-            icon="send"
-            iconBg="bg-amber-50 text-amber-600"
-            label="Active Applications"
-            value={
-              (stats?.by_status?.applied ?? 0) +
-              (stats?.by_status?.interview ?? 0)
-            }
-          />
+          <Section title={text("继续工作", "Continue Working")} eyebrow={text("项目与职业", "Projects and career")}>
+            {activeProjects.length === 0 && activeApplications.length === 0 ? <EmptyState icon="branch" title={text("没有正在进行的工作", "No active work yet")} description={text("创建一个项目，或从 Career 中保存一个职位。", "Create a project or save an opportunity in Career.")} action={{ label: text("创建项目", "Create project"), href: "/projects?new=1" }} /> : <div className="grid gap-3 sm:grid-cols-2">{activeProjects.map((project) => <Link key={project.id} href="/projects" className="lift-card rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4"><div className="flex items-center justify-between"><StatusPill tone={project.status === "blocked" ? "warning" : "brand"}>{project.status}</StatusPill><span className="text-[10px] text-[#7A6A50]">{project.progress}%</span></div><h3 className="mt-3 text-sm font-medium tracking-[0.1em]">{project.title}</h3><p className="mt-2 truncate text-[11px] text-[#7A6A50]">{project.next_action || text("需要定义下一步", "Needs a next action")}</p></Link>)}{activeApplications.map((record) => <Link key={record.id} href="/career/applications" className="lift-card rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4"><div className="flex items-center justify-between"><StatusPill tone="success">{record.status}</StatusPill><span className="text-[10px] text-[#7A6A50]">{record.ats_scores.overall == null ? "—" : `${record.ats_scores.overall}%`}</span></div><h3 className="mt-3 truncate text-sm font-medium tracking-[0.1em]">{record.job_title}</h3><p className="mt-2 truncate text-[11px] text-[#7A6A50]">{record.company}</p></Link>)}</div>}
+          </Section>
         </div>
 
-        {/* History Table */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="font-bold text-lg">Application History</h3>
-          </div>
+        <div className="space-y-5">
+          <Section title={text("AI 建议", "AI Suggestions")} eyebrow={text("基于当前工作区", "From workspace context")}>
+            <div className="rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-3">{suggestions.map((item, index) => <Link key={item.title} href={item.href} className={`group flex gap-3 rounded-[6px] p-3 transition-all duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-1 hover:bg-[#FDFAF3] ${index ? "border-t border-[rgba(30,26,20,0.12)]" : ""}`}><span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-[6px] bg-[#F5EFE0]"><BirchIcon name="leaf" size={16} /></span><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{item.title}</span><span className="mt-1 block text-[10px] leading-5 text-[#7A6A50]">{item.detail}</span></span><span className="mt-1 text-[#9A8468]" aria-hidden="true">→</span></Link>)}</div>
+          </Section>
 
-          {loading ? (
-            <div className="p-12 text-center text-slate-500">Loading...</div>
-          ) : error ? (
-            <div className="p-12 text-center">
-              <p className="text-red-500 mb-2">{error}</p>
-              <p className="text-sm text-slate-500">
-                Make sure the API server is running:{" "}
-                <code className="bg-slate-100 px-2 py-0.5 rounded">
-                  uvicorn api.server:app --reload
-                </code>
-              </p>
-            </div>
-          ) : records.length === 0 ? (
-            <div className="p-12 text-center">
-              <span className="material-symbols-outlined text-4xl text-slate-300 block mb-4">
-                description
-              </span>
-              <p className="text-slate-500 mb-4">No resumes generated yet</p>
-              <Link
-                href="/generate"
-                className="inline-flex items-center gap-2 bg-[#4051b5] text-white px-4 py-2 rounded-lg text-sm font-medium"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                Generate Your First Resume
-              </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                    <th className="px-6 py-4 font-semibold w-8"></th>
-                    <th className="px-6 py-4 font-semibold">Company</th>
-                    <th className="px-6 py-4 font-semibold">Role</th>
-                    <th className="px-6 py-4 font-semibold">Date</th>
-                    <th className="px-6 py-4 font-semibold">ATS Score</th>
-                    <th className="px-6 py-4 font-semibold">Status</th>
-                    <th className="px-6 py-4 font-semibold">Files</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {records.map((r) => (
-                    <>
-                      <tr
-                        key={r.id}
-                        onClick={() => handleExpand(r.id)}
-                        className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                      >
-                        <td className="pl-6 py-4">
-                          <span
-                            className={`material-symbols-outlined text-slate-400 text-[18px] transition-transform ${
-                              expandedId === r.id ? "rotate-90" : ""
-                            }`}
-                          >
-                            chevron_right
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="size-8 rounded bg-slate-100 flex items-center justify-center font-bold text-xs text-[#4051b5]">
-                              {r.company.charAt(0).toUpperCase()}
-                            </div>
-                            <span className="font-medium">{r.company}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{r.job_title}</td>
-                        <td className="px-6 py-4 text-sm text-slate-500">
-                          {r.timestamp.slice(0, 10)}
-                        </td>
-                        <td className="px-6 py-4">
-                          {r.ats_scores.overall != null ? (
-                            <span className="text-sm font-bold">{r.ats_scores.overall}%</span>
-                          ) : (
-                            <span className="text-sm text-slate-400">N/A</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                          <select
-                            value={r.status}
-                            onChange={(e) => handleStatusChange(r.id, e.target.value)}
-                            className={`text-xs font-medium px-2.5 py-1 rounded-full border-none cursor-pointer ${
-                              STATUS_COLORS[r.status] || "bg-slate-100 text-slate-700"
-                            }`}
-                          >
-                            {STATUS_OPTIONS.map((s) => (
-                              <option key={s} value={s}>
-                                {s.charAt(0).toUpperCase() + s.slice(1)}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1.5">
-                            {r.has_resume && (
-                              <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">
-                                LaTeX
-                              </span>
-                            )}
-                            {r.has_cover_letter && (
-                              <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded">
-                                CL
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+          <Section title={text("即将到来", "Upcoming")} eyebrow={text("日期与提醒", "Dates and reminders")} action={<Link href="/tasks?view=all" className="text-xs text-[#1E1A14] underline decoration-[#B8A98A] underline-offset-4">{text("任务", "Tasks")} →</Link>}>
+            {upcoming.length === 0 ? <div className="rounded-[16px] border border-[rgba(30,26,20,0.12)] px-4 py-5 text-center text-[11px] text-[#7A6A50]">{text("近期没有已安排的截止日期", "No upcoming due dates")}</div> : <div className="space-y-2">{upcoming.map((task) => <div key={task.id} className="flex items-center gap-3 rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-3"><span className="flex size-9 items-center justify-center rounded-[6px] bg-[#EBE2CC] text-[10px]">{task.due_date?.slice(5)}</span><span className="min-w-0 flex-1 truncate text-xs">{task.title}</span></div>)}</div>}
+          </Section>
 
-                      {/* Expanded detail row */}
-                      {expandedId === r.id && (
-                        <tr key={`${r.id}-detail`}>
-                          <td colSpan={7} className="p-0">
-                            <div className="bg-slate-50 border-t border-slate-200">
-                              {detailLoading ? (
-                                <div className="p-8 text-center text-slate-500">
-                                  <div className="animate-spin size-6 border-2 border-[#4051b5]/20 border-t-[#4051b5] rounded-full mx-auto mb-2" />
-                                  Loading content...
-                                </div>
-                              ) : !detail?.resume_tex && !detail?.cover_letter ? (
-                                <div className="p-8 text-center text-slate-400">
-                                  <span className="material-symbols-outlined text-3xl block mb-2">
-                                    info
-                                  </span>
-                                  No content saved for this record (generated before content saving was enabled).
-                                </div>
-                              ) : (
-                                <div className="p-6">
-                                  {/* Action buttons */}
-                                  <div className="flex flex-wrap gap-3 mb-4">
-                                    {detail?.resume_tex && (
-                                      <button
-                                        onClick={() =>
-                                          downloadFile(
-                                            detail.resume_tex,
-                                            `${r.company}_${r.job_title}.tex`.replace(/\s+/g, "_")
-                                          )
-                                        }
-                                        className="inline-flex items-center gap-1.5 bg-[#4051b5] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[#4051b5]/90 transition-colors"
-                                      >
-                                        <span className="material-symbols-outlined text-[16px]">
-                                          download
-                                        </span>
-                                        Download LaTeX
-                                      </button>
-                                    )}
-                                    {detail?.resume_tex && (
-                                      <button
-                                        onClick={() =>
-                                          handleDownloadPdf(
-                                            "resume",
-                                            `${r.company}_${r.job_title}.pdf`.replace(/\s+/g, "_")
-                                          )
-                                        }
-                                        disabled={pdfLoading !== null}
-                                        className="inline-flex items-center gap-1.5 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
-                                      >
-                                        <span className="material-symbols-outlined text-[16px]">
-                                          picture_as_pdf
-                                        </span>
-                                        {pdfLoading === "resume" ? "Compiling..." : "Resume PDF"}
-                                      </button>
-                                    )}
-                                    {detail?.cover_letter && (
-                                      <button
-                                        onClick={() =>
-                                          downloadFile(
-                                            detail.cover_letter,
-                                            `${r.company}_${r.job_title}_cover_letter.txt`.replace(
-                                              /\s+/g,
-                                              "_"
-                                            )
-                                          )
-                                        }
-                                        className="inline-flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 transition-colors"
-                                      >
-                                        <span className="material-symbols-outlined text-[16px]">
-                                          download
-                                        </span>
-                                        Cover Letter TXT
-                                      </button>
-                                    )}
-                                    {detail?.cover_letter && (
-                                      <button
-                                        onClick={() =>
-                                          handleDownloadPdf(
-                                            "cover",
-                                            `${r.company}_${r.job_title}_cover_letter.pdf`.replace(/\s+/g, "_")
-                                          )
-                                        }
-                                        disabled={pdfLoading !== null}
-                                        className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                                      >
-                                        <span className="material-symbols-outlined text-[16px]">
-                                          picture_as_pdf
-                                        </span>
-                                        {pdfLoading === "cover" ? "Compiling..." : "Cover Letter PDF"}
-                                      </button>
-                                    )}
-                                  </div>
+          <Section title={text("最近活动", "Recent Activity")} eyebrow={text("跨模块变化", "Across the workspace")}>
+            {activities.length === 0 ? <p className="rounded-[16px] border border-[rgba(30,26,20,0.12)] px-4 py-5 text-center text-[11px] text-[#7A6A50]">{text("创建项目、任务或知识后，活动会出现在这里。", "Changes to projects, tasks, and knowledge will appear here.")}</p> : <div className="space-y-3">{activities.slice(0, 5).map((item) => <div key={item.id} className="flex items-start gap-3"><span className="mt-1.5 size-1.5 bg-[#B8A98A]" /><div className="min-w-0"><p className="truncate text-xs">{item.title}</p><p className="latin mt-0.5 text-[9px] uppercase tracking-[0.22em] text-[#9A8468]">{item.module} · {item.action}</p></div></div>)}</div>}
+          </Section>
 
-                                  {pdfError && (
-                                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs">
-                                      {pdfError}
-                                    </div>
-                                  )}
-
-                                  {/* Content tabs */}
-                                  <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                                    <div className="flex border-b border-slate-200">
-                                      {detail?.resume_tex && (
-                                        <button
-                                          onClick={() => setDetailTab("resume")}
-                                          className={`px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                                            detailTab === "resume"
-                                              ? "border-[#4051b5] text-[#4051b5]"
-                                              : "border-transparent text-slate-500 hover:text-slate-700"
-                                          }`}
-                                        >
-                                          Resume (LaTeX)
-                                        </button>
-                                      )}
-                                      {detail?.cover_letter && (
-                                        <button
-                                          onClick={() => setDetailTab("cover")}
-                                          className={`px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                                            detailTab === "cover"
-                                              ? "border-[#4051b5] text-[#4051b5]"
-                                              : "border-transparent text-slate-500 hover:text-slate-700"
-                                          }`}
-                                        >
-                                          Cover Letter
-                                        </button>
-                                      )}
-                                    </div>
-                                    <div className="max-h-[400px] overflow-auto">
-                                      {detailTab === "resume" ? (
-                                        <pre className="p-4 text-xs leading-relaxed font-mono text-slate-700 whitespace-pre-wrap">
-                                          {detail?.resume_tex}
-                                        </pre>
-                                      ) : (
-                                        <div className="p-4 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
-                                          {detail?.cover_letter}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* CTA */}
-        <div className="mt-8">
-          <div className="bg-gradient-to-r from-[#4051b5] to-indigo-600 rounded-xl p-8 text-white relative overflow-hidden">
-            <div className="relative z-10">
-              <h3 className="text-2xl font-bold mb-2">Ready to land your next role?</h3>
-              <p className="text-indigo-100 max-w-md mb-6">
-                Our AI analyzes your experience to generate high-scoring resumes tailored
-                for specific jobs in seconds.
-              </p>
-              <Link
-                href="/generate"
-                className="bg-white text-[#4051b5] px-6 py-2.5 rounded-lg font-bold inline-flex items-center gap-2 hover:bg-slate-50 transition-colors"
-              >
-                <span className="material-symbols-outlined">rocket_launch</span>
-                Start New Generator
-              </Link>
-            </div>
-            <span className="material-symbols-outlined absolute -right-8 -bottom-8 text-[200px] text-white/10 rotate-12">
-              auto_awesome
-            </span>
-          </div>
+          <div className="flex items-center gap-3 rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4"><span className={`size-2.5 ${backendOnline === null ? "bg-[#9A8468]" : backendOnline ? "bg-[#B8A98A]" : "bg-[#1E1A14]"}`} /><div className="flex-1"><p className="text-xs font-medium">{text("工作区服务", "Workspace services")}</p><p className="mt-0.5 text-[10px] text-[#7A6A50]">{backendOnline === null ? text("正在检查…", "Checking…") : backendOnline ? text("在线，自动化可连接", "Online, ready for automations") : text("离线，部分职业功能不可用", "Offline, some Career features are unavailable")}</p></div><Link href="/automations" className="text-[10px] text-[#1E1A14] underline decoration-[#B8A98A] underline-offset-4">{text("查看", "View")}</Link></div>
         </div>
       </div>
-    </>
-  );
-}
-
-function StatCard({
-  icon,
-  iconBg,
-  label,
-  value,
-}: {
-  icon: string;
-  iconBg: string;
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-      <div className="flex items-center gap-4">
-        <div className={`size-12 rounded-lg flex items-center justify-center ${iconBg}`}>
-          <span className="material-symbols-outlined text-[28px]">{icon}</span>
-        </div>
-        <div>
-          <p className="text-sm text-slate-500">{label}</p>
-          <p className="text-2xl font-bold">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
+      <p className="text-center text-[10px] text-[#9A8468]">{text(`${projects.length} 个项目 · ${tasks.filter((task) => task.status === "todo").length} 项待办 · ${knowledge.length} 条知识`, `${projects.length} projects · ${tasks.filter((task) => task.status === "todo").length} open tasks · ${knowledge.length} knowledge items`)}</p>
+    </WorkspacePage>
+  </>;
 }

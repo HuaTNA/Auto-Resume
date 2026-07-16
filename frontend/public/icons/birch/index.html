@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>桦 · Birch Icon Set</title>
+    <style>
+      :root { color-scheme: light; --ink: #1e1a14; --paper: #e8e1d0; --tile: #f5efe0; --muted: #9a8468; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: Georgia, "Noto Serif SC", serif; }
+      main { width: min(760px, calc(100% - 40px)); margin: 0 auto; padding: 72px 0 88px; }
+      header { text-align: center; margin-bottom: 52px; }
+      h1 { margin: 0; font-size: clamp(64px, 12vw, 96px); font-weight: 400; line-height: 1; }
+      .eyebrow { margin-top: 20px; font-size: 12px; letter-spacing: .52em; text-transform: uppercase; }
+      .subtitle { margin-top: 14px; color: #7a6a50; font-size: 13px; letter-spacing: .34em; }
+      .divider { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 34px; }
+      .divider::before, .divider::after { content: ""; width: 60px; height: 1px; background: #b8a98a; }
+      .divider span { width: 5px; height: 5px; border-radius: 999px; background: #b8a98a; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px 24px; }
+      article { text-align: center; }
+      .tile { aspect-ratio: 1; display: grid; place-items: center; padding: 20%; border-radius: 20px; background: var(--tile); box-shadow: 0 3px 14px rgba(30,26,20,.07); transition: transform .25s ease, box-shadow .25s ease; }
+      .tile:hover { transform: translateY(-5px); box-shadow: 0 16px 42px rgba(30,26,20,.14); }
+      .tile img { display: block; width: 100%; height: 100%; }
+      h2 { margin: 14px 0 0; font-size: 19px; font-weight: 400; }
+      article p { margin: 3px 0 0; color: var(--muted); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; }
+      footer { margin-top: 58px; text-align: center; color: var(--muted); font-size: 11px; font-style: italic; letter-spacing: .26em; }
+      @media (max-width: 560px) { main { padding-top: 48px; } .grid { gap: 20px 14px; } .tile { border-radius: 14px; } h2 { font-size: 16px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>桦</h1>
+        <div class="eyebrow">Icon Set</div>
+        <div class="subtitle">以白桦为意象</div>
+        <div class="divider"><span></span></div>
+      </header>
+      <section class="grid">
+        <article><div class="tile"><img src="tree.svg" alt="树" /></div><h2>树</h2><p>Tree</p></article>
+        <article><div class="tile"><img src="leaf.svg" alt="叶" /></div><h2>叶</h2><p>Leaf</p></article>
+        <article><div class="tile"><img src="grove.svg" alt="林" /></div><h2>林</h2><p>Grove</p></article>
+        <article><div class="tile"><img src="bark.svg" alt="皮" /></div><h2>皮</h2><p>Bark</p></article>
+        <article><div class="tile"><img src="catkin.svg" alt="絮" /></div><h2>絮</h2><p>Catkin</p></article>
+        <article><div class="tile"><img src="bud.svg" alt="芽" /></div><h2>芽</h2><p>Bud</p></article>
+        <article><div class="tile"><img src="growth-ring.svg" alt="纹" /></div><h2>纹</h2><p>Growth Ring</p></article>
+        <article><div class="tile"><img src="branch.svg" alt="枝" /></div><h2>枝</h2><p>Branch</p></article>
+        <article><div class="tile"><img src="winter.svg" alt="雪" /></div><h2>雪</h2><p>Winter</p></article>
+      </section>
+      <footer>Betula platyphylla · 白桦</footer>
+    </main>
+  </body>
+</html>

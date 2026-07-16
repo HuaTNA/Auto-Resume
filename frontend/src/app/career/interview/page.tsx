@@ -1,0 +1,8 @@
+"use client";
+
+import Link from "next/link";
+import Header from "@/components/Header";
+import { EmptyState, Section, WorkspacePage } from "@/components/workspace/WorkspaceUI";
+import { useLanguage } from "@/lib/language-context";
+
+export default function InterviewPage() { const { text } = useLanguage(); return <><Header eyebrow={{ zh: "职业工作区", en: "CAREER WORKSPACE" }} title={{ zh: "面试准备", en: "Interview Prep" }} subtitle={{ zh: "把职位、经历故事、问题清单和复盘放进同一个语境。", en: "Keep role context, stories, questions, and debriefs together." }} /><WorkspacePage><Section title={text("面试工作区", "Interview workspace")} eyebrow={text("基础结构已就绪", "Foundation ready")}><EmptyState icon="leaf" title={text("选择一项进入面试阶段的申请", "Choose an application in interview stage")} description={text("当申请状态更新为“面试中”后，这里会承接职位分析、STAR 故事、提问清单与复盘笔记。", "When an application moves to Interview, this space will hold role analysis, STAR stories, questions, and debrief notes.")} action={{ label: text("查看申请", "Open applications"), href: "/career/applications" }} /></Section><div className="rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-5"><p className="text-xs font-medium tracking-[0.1em]">{text("当前可用", "Available now")}</p><p className="mt-2 text-xs leading-6 text-[#7A6A50]">{text("你可以先在申请记录中更新状态，再到 Knowledge 保存面试研究和问题。", "Update application status first, then save interview research and questions in Knowledge.")}</p><Link href="/knowledge?new=1" className="mt-4 inline-block text-xs text-[#1E1A14] underline decoration-[#B8A98A] underline-offset-4">{text("新建面试笔记", "Create interview note")} →</Link></div></WorkspacePage></>; }

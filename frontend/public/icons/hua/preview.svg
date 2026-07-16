@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12101F"/>
+      <stop offset="1" stop-color="#1B1832"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(925 10) rotate(137) scale(520 420)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6D5DFC" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#6D5DFC" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30" y="-30" width="140" height="140" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#05040D" flood-opacity=".28"/>
+    </filter>
+
+    <symbol id="i-mark" viewBox="0 0 24 24">
+      <path d="M7 3.5v17M3.5 8h7M7 8 3.6 14.2M7 8l3.6 5.2m3.6-8.7-2.1 4m2.2-3.3v6m3.9-6.7v6.2l2.3-1.4M13 15.6h8m-4-2.8v7.7"/>
+    </symbol>
+    <symbol id="i-home" viewBox="0 0 24 24">
+      <path d="m3.5 11.3 8.5-7.5 8.5 7.5M5.5 10v9.3c0 .5.4.9.9.9h11.2c.5 0 .9-.4.9-.9V10M12 12.7v7.5m-2.5-5h5M12 15.2l-2.2 2.4m2.2-2.4 2.2 2.4"/>
+    </symbol>
+    <symbol id="i-copilot" viewBox="0 0 24 24">
+      <path d="M12 3.2c.5 3.5 2.3 5.3 5.8 5.8-3.5.5-5.3 2.3-5.8 5.8-.5-3.5-2.3-5.3-5.8-5.8 3.5-.5 5.3-2.3 5.8-5.8ZM5.2 14.2v6.6m-2.5-4.1h5m-2.5 0-2 2.1m2-2.1 2 2.1m11.5-4.3c.2 1.5 1 2.3 2.5 2.5-1.5.2-2.3 1-2.5 2.5-.2-1.5-1-2.3-2.5-2.5 1.5-.2 2.3-1 2.5-2.5Z"/>
+    </symbol>
+    <symbol id="i-career" viewBox="0 0 24 24">
+      <path d="M8.5 7V5.8c0-1 .8-1.8 1.8-1.8h3.4c1 0 1.8.8 1.8 1.8V7M3 12.2h18M12 10v7.5m-2.3-3.3h4.6m-2.3 0-2 2m2-2 2 2"/>
+      <rect x="3" y="7" width="18" height="13.5" rx="2.5"/>
+    </symbol>
+    <symbol id="i-knowledge" viewBox="0 0 24 24">
+      <path d="M12 6.5C10.2 4.8 7.5 4 4 4v13.5c3.5 0 6.2.8 8 2.5m0-13.5C13.8 4.8 16.5 4 20 4v13.5c-3.5 0-6.2.8-8 2.5m0-13.5V20M7 8.2h2.4M8.2 6.9v4.8m0-2.4-1.7 1.8m1.7-1.8 1.5 1.6"/>
+    </symbol>
+    <symbol id="i-automation" viewBox="0 0 24 24">
+      <circle cx="12" cy="4.5" r="2"/><circle cx="5" cy="18.5" r="2"/><circle cx="12" cy="18.5" r="2"/><circle cx="19" cy="18.5" r="2"/>
+      <path d="M12 6.5v5.2M5 16.5v-2.2c0-1.4 1.1-2.6 2.6-2.6h8.8c1.4 0 2.6 1.1 2.6 2.6v2.2m-7-4.8v4.8m0-4.8-2 2m2-2 2 2"/>
+    </symbol>
+    <symbol id="i-integrations" viewBox="0 0 24 24">
+      <path d="M8.5 3v4m-3-4v4M4 7h6v2.2c0 1.7-1.3 3-3 3s-3-1.3-3-3V7Zm3 5.2v2.3C7 15.9 8.1 17 9.5 17H12m3.5 4v-4m3 4v-4m1.5 0h-6v-2.2c0-1.7 1.3-3 3-3s3 1.3 3 3V17Zm-3-5.2V9.5C17 8.1 15.9 7 14.5 7H12m0-2v14m-2-10h4"/>
+    </symbol>
+    <symbol id="i-documents" viewBox="0 0 24 24">
+      <path d="M6 3h8l4 4v14H6c-.6 0-1-.4-1-1V4c0-.6.4-1 1-1Zm8 0v5h4M9 11.5h6m-6 4h6m-3-6v8m0-4-2 2m2-2 2 2"/>
+    </symbol>
+  </defs>
+
+  <rect width="1200" height="720" rx="34" fill="url(#bg)"/>
+  <rect width="1200" height="720" rx="34" fill="url(#glow)"/>
+
+  <g transform="translate(64 54)">
+    <rect width="66" height="66" rx="20" fill="#6D5DFC" filter="url(#shadow)"/>
+    <use href="#i-mark" x="17" y="17" width="32" height="32" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="151" y="76" fill="white" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700" letter-spacing="2.4">PERSONAL OS</text>
+  <text x="151" y="108" fill="white" fill-opacity=".92" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="760">桦 / HUA ICON SYSTEM</text>
+  <text x="151" y="137" fill="white" fill-opacity=".38" font-family="Inter, Arial, sans-serif" font-size="13">24px monoline · trunk / crossbar / branch · v0.1</text>
+
+  <g transform="translate(930 64)">
+    <text x="0" y="0" fill="#8E86F7" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="1.8">VISUAL DNA</text>
+    <path d="M0 28h190" stroke="white" stroke-opacity=".08"/>
+    <text x="0" y="53" fill="white" fill-opacity=".55" font-family="Inter, Arial, sans-serif" font-size="12">1.8px</text>
+    <text x="65" y="53" fill="white" fill-opacity=".55" font-family="Inter, Arial, sans-serif" font-size="12">round</text>
+    <text x="133" y="53" fill="#72E7BD" font-family="Inter, Arial, sans-serif" font-size="12">24 × 24</text>
+  </g>
+
+  <g stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(60 190)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#6D5DFC" stroke="none"/>
+      <use href="#i-mark" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Hua Mark</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">Brand · 木 + 华</text>
+    </g>
+    <g transform="translate(330 190)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#2A2841" stroke="none"/>
+      <use href="#i-home" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Home</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">Workspace root</text>
+    </g>
+    <g transform="translate(600 190)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#2A2841" stroke="none"/>
+      <use href="#i-copilot" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Copilot</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">AI intelligence</text>
+    </g>
+    <g transform="translate(870 190)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#2A2841" stroke="none"/>
+      <use href="#i-career" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Career</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">Work and opportunities</text>
+    </g>
+
+    <g transform="translate(60 400)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#2A2841" stroke="none"/>
+      <use href="#i-knowledge" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Knowledge</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">Reusable context</text>
+    </g>
+    <g transform="translate(330 400)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#2A2841" stroke="none"/>
+      <use href="#i-automation" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Automation</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">Visible workflows</text>
+    </g>
+    <g transform="translate(600 400)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#2A2841" stroke="none"/>
+      <use href="#i-integrations" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Integrations</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">External connections</text>
+    </g>
+    <g transform="translate(870 400)">
+      <rect width="250" height="190" rx="24" fill="#201E35" stroke="white" stroke-opacity=".08"/>
+      <rect x="22" y="22" width="54" height="54" rx="16" fill="#2A2841" stroke="none"/>
+      <use href="#i-documents" x="35" y="35" width="28" height="28"/>
+      <text x="22" y="116" fill="white" stroke="none" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Documents</text>
+      <text x="22" y="143" fill="white" fill-opacity=".36" stroke="none" font-family="Inter, Arial, sans-serif" font-size="12">Files and output</text>
+    </g>
+  </g>
+
+  <text x="60" y="652" fill="white" fill-opacity=".26" font-family="Inter, Arial, sans-serif" font-size="11">Concept direction: recognizable brand glyph + functional derivatives, not eight copies of the same Chinese character.</text>
+  <circle cx="1088" cy="650" r="4" fill="#35D49A"/>
+  <text x="1102" y="654" fill="white" fill-opacity=".42" font-family="Inter, Arial, sans-serif" font-size="11">v0.1</text>
+</svg>

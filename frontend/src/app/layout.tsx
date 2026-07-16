@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { LanguageProvider } from "@/lib/language-context";
+import { WorkspaceProvider } from "@/lib/workspace-context";
 import AppShell from "@/components/AppShell";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "AI Resume Generator",
-  description: "Generate tailored resumes with AI",
+  title: {
+    default: "桦",
+    template: "%s · 桦",
+  },
+  description: "桦，一个管理项目、职业、知识、文档、任务与自动化的个人 AI 工作站。",
 };
 
 export default function RootLayout({
@@ -17,17 +19,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
         <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,400&family=Noto+Serif+SC:wght@300;400;500&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className={`${inter.className} bg-[#f6f6f8] text-slate-900 antialiased`}>
-        <AuthProvider>
-          <AppShell>{children}</AppShell>
-        </AuthProvider>
+      <body>
+        <LanguageProvider>
+          <AuthProvider>
+            <WorkspaceProvider>
+              <AppShell>{children}</AppShell>
+            </WorkspaceProvider>
+          </AuthProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

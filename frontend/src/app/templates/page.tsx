@@ -3,121 +3,27 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
+import { BirchIcon, type BirchIconName } from "@/components/icons/BirchIcons";
 import { getTemplates } from "@/lib/api";
+import { useLanguage } from "@/lib/language-context";
 
-interface Template {
-  name: string;
-  description: string;
-  path: string;
-  exists: boolean;
-}
-
-const TEMPLATE_PREVIEWS: Record<string, { color: string; icon: string; features: string[] }> = {
-  classic: {
-    color: "from-slate-700 to-slate-900",
-    icon: "text_format",
-    features: ["Clean layout", "Standard margins", "ATS-friendly", "Best for most tech roles"],
-  },
-  modern: {
-    color: "from-blue-600 to-indigo-800",
-    icon: "palette",
-    features: ["Blue accent headers", "Tighter margins", "More content space", "Stands out visually"],
-  },
-  consulting: {
-    color: "from-gray-600 to-gray-800",
-    icon: "business_center",
-    features: ["Conservative style", "Experience first", "Skills at bottom", "PM / Finance / Consulting"],
-  },
+interface Template { name: string; description: string; path: string; exists: boolean }
+const PREVIEWS: Record<string, { icon: BirchIconName; index: string; features: Array<{ zh: string; en: string }> }> = {
+  classic: { icon: "bark", index: "壹", features: [{ zh: "克制章法", en: "Measured layout" }, { zh: "标准页边", en: "Standard margins" }, { zh: "适合 ATS", en: "ATS friendly" }, { zh: "适配多数技术岗位", en: "For most technical roles" }] },
+  modern: { icon: "leaf", index: "贰", features: [{ zh: "紧凑层次", en: "Compact hierarchy" }, { zh: "内容容量更大", en: "More content space" }, { zh: "阅读节奏清楚", en: "Clear reading rhythm" }, { zh: "适配创新岗位", en: "For innovative roles" }] },
+  consulting: { icon: "growth-ring", index: "叁", features: [{ zh: "经历为先", en: "Experience first" }, { zh: "信息秩序严谨", en: "Rigorous structure" }, { zh: "技能收束于末", en: "Skills at the close" }, { zh: "适配咨询与管理", en: "For consulting & management" }] },
 };
 
 export default function TemplatesPage() {
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const router = useRouter();
-
-  useEffect(() => {
-    loadTemplates();
-  }, []);
-
-  async function loadTemplates() {
-    try {
-      const data = await getTemplates();
-      setTemplates(data.templates);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load templates");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleSelect(name: string) {
-    router.push(`/generate?template=${name}`);
-  }
-
-  return (
-    <>
-      <Header title="Resume Templates" />
-
-      <div className="p-8 max-w-5xl mx-auto w-full">
-        <p className="text-slate-600 mb-8">
-          Choose a template style for your resume. Click to start generating.
-        </p>
-
-        {loading ? (
-          <div className="text-center py-12 text-slate-500">Loading templates...</div>
-        ) : error ? (
-          <div className="text-center py-12 text-red-500">{error}</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {templates.map((t) => {
-              const preview = TEMPLATE_PREVIEWS[t.name] || TEMPLATE_PREVIEWS.classic;
-              return (
-                <div
-                  key={t.name}
-                  onClick={() => handleSelect(t.name)}
-                  className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg hover:border-[#4051b5]/50 transition-all cursor-pointer group"
-                >
-                  {/* Preview header */}
-                  <div
-                    className={`bg-gradient-to-br ${preview.color} p-8 text-white text-center relative group-hover:opacity-90 transition-opacity`}
-                  >
-                    <span className="material-symbols-outlined text-5xl mb-3 block opacity-80">
-                      {preview.icon}
-                    </span>
-                    <h3 className="text-xl font-bold capitalize">{t.name}</h3>
-                    {t.name === "classic" && (
-                      <span className="absolute top-3 right-3 bg-white/20 px-2 py-0.5 rounded text-xs">
-                        Default
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Details */}
-                  <div className="p-6">
-                    <p className="text-sm text-slate-600 mb-4">{t.description}</p>
-                    <ul className="space-y-2">
-                      {preview.features.map((f) => (
-                        <li key={f} className="flex items-center gap-2 text-sm text-slate-700">
-                          <span className="material-symbols-outlined text-green-500 text-[16px]">
-                            check_circle
-                          </span>
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-
-                    <button className="mt-6 w-full bg-[#4051b5] text-white py-2.5 rounded-lg font-medium text-sm hover:bg-[#4051b5]/90 transition-colors flex items-center justify-center gap-2">
-                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                      Use This Template
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </>
-  );
+  const [templates, setTemplates] = useState<Template[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const router = useRouter();
+  const { text } = useLanguage();
+  useEffect(() => { (async () => { try { setTemplates((await getTemplates()).templates); } catch (e) { setError(e instanceof Error ? e.message : "Failed to load templates"); } finally { setLoading(false); } })(); }, []);
+  return <><Header eyebrow={{ zh: "文书 · 范式", en: "DOCUMENT FORMS · TEMPLATES" }} title={{ zh: "选择履历章法", en: "Choose a resume form" }} subtitle={{ zh: "形式应退后一步，让经历与判断成为主角。", en: "Let form recede so experience and judgment can lead." }} />
+    <div className="mx-auto w-full max-w-[960px] px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
+      <div className="mb-8 flex items-end justify-between gap-5"><div><p className="eyebrow text-[#9A8468]">{text("三种克制范式", "Three measured forms")}</p><h2 className="mt-2 text-2xl font-light tracking-[0.1em]">{text("一式，一种叙述秩序", "A form for every narrative")}</h2><p className="mt-3 max-w-xl text-sm leading-7 text-[#7A6A50]">{text("选择与你的经历密度和目标行业最相称的表达方式。", "Choose the expression that best fits your experience and target field.")}</p></div><div className="ornament-divider hidden sm:flex" aria-hidden="true"><span /></div></div>
+      {loading ? <p className="py-16 text-center text-sm text-[#7A6A50]">正在展开范式…</p> : error ? <p className="rounded-[6px] bg-[#EBE2CC] p-5 text-center text-sm">{error}</p> : <div className="grid gap-5 md:grid-cols-3">{templates.map((template) => { const preview = PREVIEWS[template.name] ?? PREVIEWS.classic; return <article key={template.name} onClick={() => router.push(`/generate?template=${template.name}`)} className="soft-card lift-card group cursor-pointer overflow-hidden">
+        <div className="relative flex min-h-48 flex-col items-center justify-center border-b border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-7 text-center"><span className="latin absolute left-5 top-4 text-2xl italic text-[#B8A98A]">{preview.index}</span>{template.name === "classic" && <span className="absolute right-4 top-4 rounded-[6px] border border-[rgba(30,26,20,0.12)] px-2 py-1 text-[9px] tracking-[0.15em] text-[#7A6A50]">{text("默认", "Default")}</span>}<BirchIcon name={preview.icon} size={58} /><h3 className="latin mt-5 text-xl font-normal capitalize tracking-[0.12em]">{template.name}</h3></div>
+        <div className="p-6"><p className="min-h-14 text-sm leading-7 text-[#7A6A50]">{template.description}</p><ul className="mt-5 space-y-2.5">{preview.features.map((feature) => <li key={feature.en} className="flex items-center gap-3 text-xs text-[#7A6A50]"><span className="size-1 rounded-full bg-[#B8A98A]" />{text(feature.zh, feature.en)}</li>)}</ul><button className="primary-button mt-7 w-full">{text("采用此式", "Use this form")} <span aria-hidden="true">→</span></button></div>
+      </article>; })}</div>}
+    </div></>;
 }

@@ -1,6 +1,8 @@
-# AI Resume Generator
+# 桦 · Personal AI Workspace
 
-Generate tailored resumes, cover letters, and find jobs — all powered by Claude API. Includes a full web UI and CLI.
+An extensible personal command center for projects, tasks, knowledge, documents, automations, AI workflows, and career development. The original AI Resume Generator and Job Application Tracker are preserved as the Career workspace.
+
+The new product information architecture, shared data contracts, and staged Supabase migration are documented in [`docs/personal-ai-workspace-architecture.md`](docs/personal-ai-workspace-architecture.md).
 
 ## Features
 

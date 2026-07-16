@@ -3,7 +3,9 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
+import { BirchIcon } from "@/components/icons/BirchIcons";
 import { parseJD, retrieveBullets, generateResume, scoreResume, refineResume, saveHistory, compilePdf, compileCoverLetterPdf } from "@/lib/api";
+import { useLanguage } from "@/lib/language-context";
 
 type Step = "input" | "parsing" | "bullets" | "generating" | "result";
 
@@ -33,6 +35,7 @@ export default function GeneratePage() {
 }
 
 function GenerateContent() {
+  const { text } = useLanguage();
   const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("input");
   const [jdText, setJdText] = useState("");
@@ -163,37 +166,41 @@ function GenerateContent() {
 
   return (
     <>
-      <Header title="Generate Resume" />
+      <Header
+        eyebrow={{ zh: "申请文书 · 成文", en: "APPLICATION STUDIO · CREATE" }}
+        title={{ zh: "因职成文", en: "Tailor an application" }}
+        subtitle={{ zh: "读懂职位所需，再从真实经历中取材成篇。", en: "Read what the role needs, then shape an answer from real experience." }}
+      />
 
-      <div className="p-8 max-w-7xl mx-auto w-full">
+      <div className="mx-auto w-full max-w-[960px] p-5 sm:p-8 lg:p-10">
         {/* Progress bar */}
         <div className="flex items-center gap-4 mb-8">
           <div className="flex items-center gap-2">
             <StepIndicator num={1} active={step === "input"} done={step !== "input"} />
-            <span className="text-sm font-medium">Input JD</span>
+            <span className="text-sm font-normal">{text("职位", "Role")}</span>
           </div>
-          <div className="flex-1 h-0.5 bg-slate-200" />
+          <div className="flex-1 h-0.5 bg-[#B8A98A]" />
           <div className="flex items-center gap-2">
             <StepIndicator
               num={2}
               active={step === "parsing" || step === "bullets"}
               done={["generating", "result"].includes(step)}
             />
-            <span className="text-sm font-medium">Analyze</span>
+            <span className="text-sm font-normal">{text("辨析", "Analyze")}</span>
           </div>
-          <div className="flex-1 h-0.5 bg-slate-200" />
+          <div className="flex-1 h-0.5 bg-[#B8A98A]" />
           <div className="flex items-center gap-2">
             <StepIndicator
               num={3}
               active={step === "generating"}
               done={step === "result"}
             />
-            <span className="text-sm font-medium">Generate & Optimize</span>
+            <span className="text-sm font-normal">{text("成文", "Create")}</span>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div className="mb-6 p-4 bg-[#EBE2CC] border border-[rgba(30,26,20,0.12)] rounded-lg text-[#1E1A14] text-sm">
             {error}
           </div>
         )}
@@ -201,35 +208,33 @@ function GenerateContent() {
         {/* Step 1: Input */}
         {step === "input" && (
           <div className="space-y-6">
-            <div className="p-8 bg-[#4051b5]/5 rounded-2xl border-2 border-dashed border-[#4051b5]/20">
+            <div className="rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-6 sm:p-8">
               <div className="max-w-3xl mx-auto text-center">
-                <span className="material-symbols-outlined text-4xl text-[#4051b5] mb-4 block">
-                  terminal
-                </span>
-                <h2 className="text-2xl font-black mb-4">Paste Job Description</h2>
-                <p className="text-slate-600 mb-6">
-                  Paste the target job description to let our AI tailor your resume for maximum ATS score.
+                <BirchIcon name="bark" size={40} className="mx-auto mb-4" />
+                <h2 className="mb-3 text-2xl font-light tracking-[0.1em]">{text("贴入职位描述", "Add the job description")}</h2>
+                <p className="text-[#7A6A50] mb-6">
+                  {text("桦将辨析职责与能力要求，并从你的经历中选择相称的证据。", "桦 will read the responsibilities and select fitting evidence from your experience.")}
                 </p>
                 <textarea
                   value={jdText}
                   onChange={(e) => setJdText(e.target.value)}
-                  className="w-full min-h-[250px] p-6 rounded-xl border-2 border-[#4051b5]/20 bg-white focus:border-[#4051b5] focus:ring-0 text-slate-800 resize-none text-sm"
-                  placeholder="Paste the full job description here..."
+                  className="w-full min-h-[250px] p-6 rounded-xl border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] focus:border-[#1E1A14] focus:ring-0 text-[#1E1A14] resize-none text-sm"
+                  placeholder={text("在此贴入完整职位描述…", "Paste the full job description here…")}
                 />
               </div>
             </div>
 
             {/* Options */}
-            <div className="flex flex-wrap gap-6 items-center justify-between bg-white p-6 rounded-xl border border-slate-200">
+            <div className="soft-card flex flex-wrap items-center justify-between gap-6 rounded-[16px] p-5 sm:p-6">
               <div className="flex items-center gap-4">
-                <label className="text-sm font-medium text-slate-700">Template:</label>
+                <label className="text-sm font-medium text-[#7A6A50]">{text("范式：", "Template:")}</label>
                 <select
                   value={template}
                   onChange={(e) => setTemplate(e.target.value)}
-                  className="text-sm border border-slate-300 rounded-lg px-3 py-2"
+                  className="text-sm border border-[rgba(30,26,20,0.12)] rounded-lg px-3 py-2"
                 >
                   <option value="classic">Classic</option>
-                  <option value="modern">Modern (Blue)</option>
+                  <option value="modern">Modern</option>
                   <option value="consulting">Consulting</option>
                 </select>
               </div>
@@ -238,17 +243,17 @@ function GenerateContent() {
                   type="checkbox"
                   checked={genCoverLetter}
                   onChange={(e) => setGenCoverLetter(e.target.checked)}
-                  className="rounded text-[#4051b5]"
+                  className="rounded text-[#1E1A14]"
                 />
-                Generate Cover Letter
+                {text("生成求职信", "Generate cover letter")}
               </label>
               <button
                 onClick={handleGenerate}
                 disabled={!jdText.trim()}
-                className="bg-[#4051b5] text-white px-8 py-3 rounded-lg font-bold flex items-center gap-2 hover:bg-[#4051b5]/90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#4051b5]/20 transition-all"
+                className="primary-button px-8 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <span className="material-symbols-outlined">auto_fix_high</span>
-                Generate Resume
+                <BirchIcon name="leaf" size={18} />
+                {text("生成履历", "Generate resume")}
               </button>
             </div>
           </div>
@@ -257,15 +262,15 @@ function GenerateContent() {
         {/* Processing steps */}
         {(step === "parsing" || step === "bullets" || step === "generating") && (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="animate-spin size-12 border-4 border-[#4051b5]/20 border-t-[#4051b5] rounded-full mb-6" />
-            <p className="text-lg font-medium text-slate-700">{statusMsg}</p>
+            <div className="mb-6 flex size-12 animate-pulse items-center justify-center rounded-[6px] bg-[#EBE2CC]"><BirchIcon name="growth-ring" size={28} /></div>
+            <p className="text-lg font-medium text-[#7A6A50]">{statusMsg}</p>
             {jdAnalysis && (
-              <p className="text-sm text-slate-500 mt-2">
+              <p className="text-sm text-[#9A8468] mt-2">
                 {(jdAnalysis as Record<string, string>).job_title} @ {(jdAnalysis as Record<string, string>).company}
               </p>
             )}
             {totalBullets > 0 && (
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-[#9A8468] mt-1">
                 Selected {totalBullets} relevant bullets
               </p>
             )}
@@ -278,9 +283,9 @@ function GenerateContent() {
             {/* Left panel - ATS + actions */}
             <div className="lg:col-span-4 space-y-6">
               {/* ATS Scores */}
-              <div className="bg-white p-6 rounded-xl border border-[#4051b5]/10 shadow-sm">
-                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[#4051b5]">analytics</span>
+              <div className="soft-card p-6">
+                <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+                  <BirchIcon name="growth-ring" size={20} />
                   ATS Optimization Score
                 </h3>
                 <div className="space-y-4">
@@ -296,13 +301,13 @@ function GenerateContent() {
 
               {/* JD Info */}
               {jdAnalysis && (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h3 className="text-lg font-bold mb-3">Job Analysis</h3>
+                <div className="soft-card p-6">
+                  <h3 className="text-lg font-medium mb-3">Job Analysis</h3>
                   <p className="text-sm font-medium">{(jdAnalysis as Record<string, string>).job_title}</p>
-                  <p className="text-sm text-slate-500">{(jdAnalysis as Record<string, string>).company} - {(jdAnalysis as Record<string, string>).seniority}</p>
+                  <p className="text-sm text-[#9A8468]">{(jdAnalysis as Record<string, string>).company} - {(jdAnalysis as Record<string, string>).seniority}</p>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {((jdAnalysis as Record<string, string[]>).required_skills || []).slice(0, 8).map((s: string) => (
-                      <span key={s} className="text-xs bg-[#4051b5]/10 text-[#4051b5] px-2 py-0.5 rounded-full">
+                      <span key={s} className="text-xs bg-[#1E1A14]/10 text-[#1E1A14] px-2 py-0.5 rounded-[6px]">
                         {s}
                       </span>
                     ))}
@@ -312,14 +317,12 @@ function GenerateContent() {
 
               {/* Suggestions */}
               {atsResult.semantic.suggestions.length > 0 && (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h3 className="text-sm font-bold mb-3">Suggestions</h3>
+                <div className="soft-card p-6">
+                  <h3 className="text-sm font-medium mb-3">Suggestions</h3>
                   <div className="space-y-2">
                     {atsResult.semantic.suggestions.map((s, i) => (
-                      <div key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                        <span className="material-symbols-outlined text-amber-500 text-sm mt-0.5">
-                          lightbulb
-                        </span>
+                      <div key={i} className="flex items-start gap-2 text-sm text-[#7A6A50]">
+                        <BirchIcon name="bud" size={15} className="mt-0.5" />
                         {s}
                       </div>
                     ))}
@@ -337,23 +340,23 @@ function GenerateContent() {
 
             {/* Right panel - LaTeX preview */}
             <div className="lg:col-span-8">
-              <div className="bg-white rounded-xl shadow-2xl border border-[#4051b5]/10 relative">
-                <div className="absolute top-4 right-4 bg-slate-100 px-3 py-1 rounded text-[10px] text-slate-500 font-sans tracking-widest uppercase">
+              <div className="soft-card relative overflow-hidden">
+                <div className="absolute top-4 right-4 bg-[#EBE2CC] px-3 py-1 rounded text-[10px] text-[#9A8468]  tracking-widest uppercase">
                   {previewTab === "resume" ? "LaTeX Preview" : "Cover Letter Preview"}
                 </div>
 
                 {/* Tab bar */}
-                <div className="flex border-b border-slate-200 px-4 pt-4">
-                  <TabButton label="Resume" active={previewTab === "resume"} onClick={() => setPreviewTab("resume")} />
-                  {coverLetter && <TabButton label="Cover Letter" active={previewTab === "cover"} onClick={() => setPreviewTab("cover")} />}
+                <div className="flex border-b border-[rgba(30,26,20,0.12)] px-4 pt-4">
+                  <TabButton label={text("履历", "Resume")} active={previewTab === "resume"} onClick={() => setPreviewTab("resume")} />
+                  {coverLetter && <TabButton label={text("求职信", "Cover letter")} active={previewTab === "cover"} onClick={() => setPreviewTab("cover")} />}
                 </div>
 
                 {previewTab === "resume" ? (
-                  <pre className="p-8 overflow-auto max-h-[800px] text-xs leading-relaxed font-mono text-slate-700 whitespace-pre-wrap">
+                  <pre className="p-8 overflow-auto max-h-[800px] text-xs leading-relaxed font-mono text-[#7A6A50] whitespace-pre-wrap">
                     {resumeTex}
                   </pre>
                 ) : (
-                  <div className="p-8 overflow-auto max-h-[800px] text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                  <div className="p-8 overflow-auto max-h-[800px] text-sm leading-relaxed text-[#7A6A50] whitespace-pre-wrap">
                     {coverLetter}
                   </div>
                 )}
@@ -367,25 +370,25 @@ function GenerateContent() {
 }
 
 function StepIndicator({ num, active, done }: { num: number; active: boolean; done: boolean }) {
-  const base = "flex items-center justify-center size-8 rounded-full text-sm font-bold";
-  if (done) return <div className={`${base} bg-green-500 text-white`}>
-    <span className="material-symbols-outlined text-[18px]">check</span>
+  const base = "flex items-center justify-center size-8 rounded-[6px] text-sm font-medium";
+  if (done) return <div className={`${base} bg-[#1E1A14] text-[#F5EFE0]`}>
+    <span aria-hidden="true">已</span>
   </div>;
-  if (active) return <div className={`${base} bg-[#4051b5] text-white`}>{num}</div>;
-  return <div className={`${base} bg-slate-200 text-slate-500`}>{num}</div>;
+  if (active) return <div className={`${base} bg-[#1E1A14] text-[#F5EFE0]`}>{num}</div>;
+  return <div className={`${base} bg-[#B8A98A] text-[#9A8468]`}>{num}</div>;
 }
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
-  const color = value >= 80 ? "bg-green-500" : value >= 60 ? "bg-amber-500" : "bg-red-500";
-  const textColor = value >= 80 ? "text-green-600" : value >= 60 ? "text-amber-600" : "text-red-600";
+  const color = value >= 80 ? "bg-[#1E1A14]" : value >= 60 ? "bg-[#7A6A50]" : "bg-[#B8A98A]";
+  const textColor = value >= 80 ? "text-[#1E1A14]" : value >= 60 ? "text-[#7A6A50]" : "text-[#1E1A14]";
   return (
     <div>
       <div className="flex justify-between mb-1">
         <span className="text-sm font-medium">{label}</span>
-        <span className={`text-sm font-bold ${textColor}`}>{value}%</span>
+        <span className={`text-sm font-medium ${textColor}`}>{value}%</span>
       </div>
-      <div className="w-full h-2 bg-slate-100 rounded-full">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(value, 100)}%` }} />
+      <div className="w-full h-2 bg-[#EBE2CC] rounded-[6px]">
+        <div className={`h-full rounded-[6px] ${color}`} style={{ width: `${Math.min(value, 100)}%` }} />
       </div>
     </div>
   );
@@ -393,9 +396,9 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 
 function ScoreBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="p-3 bg-slate-50 rounded-lg border border-[#4051b5]/5">
-      <p className="text-xs text-slate-500 uppercase font-bold">{label}</p>
-      <p className="text-xl font-black text-[#4051b5]">{value}</p>
+    <div className="p-3 bg-[#FDFAF3] rounded-lg border border-[rgba(30,26,20,0.12)]">
+      <p className="text-xs text-[#9A8468] uppercase font-medium">{label}</p>
+      <p className="text-xl font-medium text-[#1E1A14]">{value}</p>
     </div>
   );
 }
@@ -404,8 +407,8 @@ function TabButton({ label, active = false, onClick }: { label: string; active?:
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-        active ? "border-[#4051b5] text-[#4051b5]" : "border-transparent text-slate-500 hover:text-slate-700"
+      className={`px-4 py-2 text-sm font-medium border-b -mb-px transition-colors ${
+        active ? "border-[#B8A98A] text-[#1E1A14]" : "border-transparent text-[#9A8468] hover:text-[#7A6A50]"
       }`}
     >
       {label}
@@ -424,6 +427,7 @@ function DownloadActions({
 }) {
   const [pdfLoading, setPdfLoading] = useState<"resume" | "cover" | null>(null);
   const [pdfError, setPdfError] = useState("");
+  const { text } = useLanguage();
 
   function downloadFile(content: string, filename: string) {
     const blob = new Blob([content], { type: "text/plain" });
@@ -465,7 +469,7 @@ function DownloadActions({
   return (
     <div className="flex flex-col gap-3">
       {pdfError && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs">
+        <div className="p-3 bg-[#EBE2CC] border border-[rgba(30,26,20,0.12)] rounded-lg text-[#1E1A14] text-xs">
           {pdfError}
         </div>
       )}
@@ -474,17 +478,17 @@ function DownloadActions({
       <button
         onClick={() => handlePdf("resume", "resume.pdf")}
         disabled={pdfLoading !== null}
-        className="w-full bg-[#4051b5] text-white font-bold py-3 rounded-lg shadow-lg shadow-[#4051b5]/20 hover:bg-[#4051b5]/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+        className="w-full bg-[#1E1A14] text-[#F5EFE0] font-medium py-3 rounded-lg shadow-[0_2px_10px_rgba(30,26,20,0.07)] hover:bg-[#1E1A14]/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
       >
-        <span className="material-symbols-outlined">picture_as_pdf</span>
-        {pdfLoading === "resume" ? "Compiling PDF..." : "Download Resume PDF"}
+        <span className="latin text-[10px] uppercase tracking-[0.2em]">PDF</span>
+        {pdfLoading === "resume" ? text("正在生成 PDF…", "Compiling PDF…") : text("下载履历 PDF", "Download resume PDF")}
       </button>
       <button
         onClick={() => downloadFile(resumeTex, "resume.tex")}
-        className="w-full bg-white border border-slate-300 text-slate-700 font-medium py-2.5 rounded-lg hover:bg-slate-50 transition-all flex items-center justify-center gap-2 text-sm"
+        className="w-full bg-[#F5EFE0] border border-[rgba(30,26,20,0.12)] text-[#7A6A50] font-medium py-2.5 rounded-lg hover:bg-[#FDFAF3] transition-all flex items-center justify-center gap-2 text-sm"
       >
-        <span className="material-symbols-outlined text-[18px]">download</span>
-        Download LaTeX Source
+        <span className="latin text-[10px] uppercase tracking-[0.2em]">TEX</span>
+        {text("下载 LaTeX 源文件", "Download LaTeX source")}
       </button>
 
       {/* Cover letter downloads */}
@@ -493,26 +497,26 @@ function DownloadActions({
           <button
             onClick={() => handlePdf("cover", "cover_letter.pdf")}
             disabled={pdfLoading !== null}
-            className="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full bg-[#1E1A14] text-[#F5EFE0] font-medium py-3 rounded-lg hover:bg-[#1E1A14] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            <span className="material-symbols-outlined">picture_as_pdf</span>
-            {pdfLoading === "cover" ? "Compiling PDF..." : "Download Cover Letter PDF"}
+            <span className="latin text-[10px] uppercase tracking-[0.2em]">PDF</span>
+            {pdfLoading === "cover" ? text("正在生成 PDF…", "Compiling PDF…") : text("下载求职信 PDF", "Download cover letter PDF")}
           </button>
           <button
             onClick={() => downloadFile(coverLetter, "cover_letter.txt")}
-            className="w-full bg-white border border-slate-300 text-slate-700 font-medium py-2.5 rounded-lg hover:bg-slate-50 transition-all flex items-center justify-center gap-2 text-sm"
+            className="w-full bg-[#F5EFE0] border border-[rgba(30,26,20,0.12)] text-[#7A6A50] font-medium py-2.5 rounded-lg hover:bg-[#FDFAF3] transition-all flex items-center justify-center gap-2 text-sm"
           >
-            <span className="material-symbols-outlined text-[18px]">download</span>
-            Download Cover Letter TXT
+            <span className="latin text-[10px] uppercase tracking-[0.2em]">TXT</span>
+            {text("下载求职信文本", "Download cover letter text")}
           </button>
         </>
       )}
 
       <button
         onClick={onReset}
-        className="w-full bg-slate-100 text-slate-700 font-bold py-3 rounded-lg hover:bg-slate-200 transition-all"
+        className="w-full bg-[#EBE2CC] text-[#7A6A50] font-medium py-3 rounded-lg hover:bg-[#B8A98A] transition-all"
       >
-        Generate Another
+        {text("再成一篇", "Create another")}
       </button>
     </div>
   );

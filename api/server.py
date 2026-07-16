@@ -51,6 +51,8 @@ def _get_cors_origins() -> list[str]:
     defaults = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
     ]
     vercel_frontend = os.environ.get("VERCEL_FRONTEND_URL", "").strip()
     if vercel_frontend:
@@ -858,7 +860,6 @@ def api_search_jobs(
             detail="ADZUNA_APP_ID and ADZUNA_APP_KEY must be set in .env"
         )
 
-    client = get_client()
     profile = _load_profile_db(current_user, db)
 
     jobs = search_adzuna(
@@ -872,5 +873,23 @@ def api_search_jobs(
     if not jobs:
         return {"jobs": [], "total": 0}
 
-    ranked = rank_jobs(jobs, profile, client, top_n=data.top_n)
-    return {"jobs": ranked, "total": len(ranked)}
+    try:
+        client = get_client()
+        ranked = rank_jobs(jobs, profile, client, top_n=data.top_n)
+        return {"jobs": ranked, "total": len(ranked), "ranking_warning": None}
+    except Exception as exc:
+        # Job discovery should remain useful when the optional AI ranking layer
+        # is unavailable (invalid key, quota, model access, malformed response,
+        # or a temporary upstream outage).
+        print(f"  AI job ranking unavailable: {type(exc).__name__}: {exc}")
+        unranked = []
+        for job in jobs[:data.top_n]:
+            item = dict(job)
+            item["match_score"] = 0
+            item["match_reason"] = "AI ranking is temporarily unavailable."
+            unranked.append(item)
+        return {
+            "jobs": unranked,
+            "total": len(unranked),
+            "ranking_warning": "AI ranking is temporarily unavailable. Showing unranked job results.",
+        }
