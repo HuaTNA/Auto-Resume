@@ -106,6 +106,8 @@ Backend:
 - `DATABASE_URL`: Supabase PostgreSQL pooler URL
 - `JWT_SECRET`: stable random value
 - `CRON_SECRET`: independent stable random value
+- `REGISTRATION_MODE=invite` and a strong `REGISTRATION_INVITE_CODE`
+- `API_REQUESTS_PER_MINUTE` and `API_DAILY_UNITS_PER_USER`: server-funded API limits
 - `ANTHROPIC_API_KEY`: current AI provider key
 - `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`: job-search credentials
 - `PRODUCTION=true`
@@ -122,3 +124,6 @@ Frontend:
 For a public launch, move sensitive values from plain Cloud Run environment
 variables into Google Secret Manager and add managed database migrations.
 
+The local SQLite runtime database must never be committed. If it appeared in a
+previous revision, remove it from Git history before sharing the repository and
+rotate credentials associated with any real accounts contained in that file.

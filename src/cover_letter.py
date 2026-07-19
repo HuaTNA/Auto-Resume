@@ -5,6 +5,7 @@ Generates a tailored cover letter from filtered profile + JD analysis using Clau
 
 import json
 import anthropic
+from src.ai_config import get_anthropic_model
 
 
 SYSTEM_PROMPT = """You are an expert cover letter writer for tech roles.
@@ -66,7 +67,7 @@ IMPORTANT:
 - End with just your name, no address block."""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=1500,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}]

@@ -6,6 +6,7 @@ Password hashing, JWT creation/verification, and cookie helpers.
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import bcrypt
 import jwt
@@ -19,18 +20,34 @@ _fallback_secret: str | None = None
 
 
 def _get_jwt_secret() -> str:
-    secret = os.environ.get("JWT_SECRET")
-    if secret:
+    secret = os.environ.get("JWT_SECRET", "").strip()
+    if len(secret.encode()) >= 32:
         return secret
+
+    production = os.environ.get("PRODUCTION", "").strip().lower() in {"1", "true", "yes", "on"}
+    if production:
+        raise RuntimeError("JWT_SECRET must be configured with at least 32 bytes in production")
 
     global _fallback_secret
     if _fallback_secret is None:
-        _fallback_secret = secrets.token_hex(32)
-        print(
-            "WARNING: JWT_SECRET not set in environment. Using a random secret. "
-            "Tokens will be invalidated on server restart. Set JWT_SECRET in your .env file."
-        )
+        secret_path = Path(__file__).resolve().parent.parent / "data" / ".jwt_secret"
+        try:
+            _fallback_secret = secret_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            secret_path.parent.mkdir(parents=True, exist_ok=True)
+            _fallback_secret = secrets.token_hex(32)
+            secret_path.write_text(_fallback_secret, encoding="utf-8")
+            secret_path.chmod(0o600)
+        if len(_fallback_secret.encode()) < 32:
+            raise RuntimeError("Persisted JWT secret is invalid")
+        if secret:
+            print("WARNING: Ignoring JWT_SECRET shorter than 32 bytes; using the protected local secret file.")
     return _fallback_secret
+
+
+def get_secret_key() -> str:
+    """Return the validated signing secret for other server-side encryption."""
+    return _get_jwt_secret()
 
 
 def hash_password(plain: str) -> str:
@@ -64,6 +81,19 @@ def decode_token(token: str) -> dict:
     Raises jwt.ExpiredSignatureError or jwt.InvalidTokenError on failure.
     """
     return jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+
+
+def create_oauth_state(user_id: int, provider: str) -> str:
+    """Create a short-lived signed state value for an OAuth redirect."""
+    now = datetime.now(timezone.utc)
+    return jwt.encode({"sub": str(user_id), "provider": provider, "purpose": "oauth", "iat": now, "exp": now + timedelta(minutes=10), "jti": secrets.token_urlsafe(16)}, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+
+def decode_oauth_state(value: str, provider: str) -> dict:
+    payload = jwt.decode(value, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+    if payload.get("purpose") != "oauth" or payload.get("provider") != provider:
+        raise jwt.InvalidTokenError("Invalid OAuth state")
+    return payload
 
 
 def _env_true(name: str, default: bool = False) -> bool:

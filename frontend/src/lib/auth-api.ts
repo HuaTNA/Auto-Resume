@@ -19,10 +19,14 @@ export interface AuthUser {
   created_at: string;
 }
 
-export async function register(email: string, password: string): Promise<AuthUser> {
+export async function getRegistrationConfig(): Promise<{ mode: "open" | "invite" | "closed" }> {
+  return authFetch("/api/auth/registration-config");
+}
+
+export async function register(email: string, password: string, inviteCode?: string): Promise<AuthUser> {
   return authFetch("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, invite_code: inviteCode || null }),
   });
 }
 
@@ -43,4 +47,16 @@ export async function getMe(): Promise<AuthUser | null> {
   } catch {
     return null;
   }
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await authFetch("/api/auth/change-password", { method: "POST", body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) });
+}
+
+export async function exportAccount(): Promise<Record<string, unknown>> {
+  return authFetch("/api/auth/export");
+}
+
+export async function deleteAccount(password: string): Promise<void> {
+  await authFetch("/api/auth/account", { method: "DELETE", body: JSON.stringify({ password }) });
 }

@@ -9,6 +9,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import anthropic
+from src.ai_config import get_anthropic_model
 
 
 ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
@@ -128,7 +129,7 @@ Scoring criteria:
 - Role type fit (engineering vs management vs research)"""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
     )

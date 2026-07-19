@@ -11,7 +11,9 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import anthropic
+import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -37,9 +39,13 @@ from api.database import (
     get_db,
 )
 from api.dependencies import get_current_user
+from api.limits import enforce_external_api_limit
+from api.auth import create_oauth_state, decode_oauth_state
+from api.oauth import PROVIDERS, authorization_url, decrypt_credentials, encrypt_credentials, exchange_code, fetch_provider_items, provider_statuses
 from api.workflows.job_search import execute_automation, generate_application_materials, run_to_dict
 from api.workflows.runner import run_due_automations
 from api.workflows.scheduling import next_run_at
+from src.ai_config import get_anthropic_model
 
 
 router = APIRouter(prefix="/api", tags=["workspace"])
@@ -361,13 +367,41 @@ class DocumentVersionCreate(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
+class DocumentUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    kind: str | None = Field(default=None, max_length=50)
+    status: str | None = Field(default=None, max_length=32)
+
+
+@router.patch("/documents/{public_id}")
+def update_document(public_id: str, data: DocumentUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(Document).filter(Document.user_id == current_user.id, Document.public_id == public_id).first()
+    if not row: raise HTTPException(404, "Document not found")
+    patch = _model_dump(data, exclude_unset=True)
+    for key, value in patch.items():
+        if value is not None: setattr(row, key, value.strip() if isinstance(value, str) else value)
+    row.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(row)
+    count = db.query(DocumentVersion).filter(DocumentVersion.document_id == row.id, DocumentVersion.user_id == current_user.id).count()
+    return {"document": _document_dict(row, count)}
+
+
 @router.post("/documents/{public_id}/versions", status_code=201)
 def create_document_version(public_id: str, data: DocumentVersionCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = db.query(Document).filter(Document.user_id == current_user.id, Document.public_id == public_id).first()
     if not row: raise HTTPException(404, "Document not found")
     latest = db.query(DocumentVersion).filter(DocumentVersion.document_id == row.id).order_by(DocumentVersion.version_number.desc()).first()
     version = DocumentVersion(public_id=_uuid(), document_id=row.id, user_id=current_user.id, version_number=(latest.version_number if latest else 0) + 1, content=data.content, storage_path=data.storage_path, metadata_json=_json_dump(data.metadata))
-    db.add(version); row.updated_at = datetime.utcnow(); _add_activity(db, current_user.id, "documents", "updated", "document", row.public_id, row.title); db.commit(); db.refresh(version)
+    db.add(version)
+    if row.owner_module == "career" and row.source_record_id and row.kind in {"resume", "cover_letter"}:
+        history = db.query(HistoryRecord).filter(
+            HistoryRecord.id == row.source_record_id,
+            HistoryRecord.user_id == current_user.id,
+        ).first()
+        if history:
+            if row.kind == "resume": history.resume_tex = data.content
+            else: history.cover_letter = data.content
+    row.updated_at = datetime.utcnow(); _add_activity(db, current_user.id, "documents", "updated", "document", row.public_id, row.title); db.commit(); db.refresh(version)
     return {"version": {"id": version.public_id, "version_number": version.version_number, "created_at": _iso(version.created_at)}}
 
 
@@ -514,7 +548,81 @@ class IntegrationUpsert(BaseModel):
 @router.get("/integrations")
 def list_integrations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     rows = db.query(Integration).filter(Integration.user_id == current_user.id).order_by(Integration.provider).all()
-    return {"integrations": [{"id": row.public_id, "provider": row.provider, "state": row.state, "scopes": _json_load(row.scopes, []), "external_account": row.external_account, "config": _json_load(row.config_json, {}), "created_at": _iso(row.created_at), "updated_at": _iso(row.updated_at)} for row in rows]}
+    return {"integrations": [{"id": row.public_id, "provider": row.provider, "state": row.state, "scopes": _json_load(row.scopes, []), "external_account": row.external_account, "created_at": _iso(row.created_at), "updated_at": _iso(row.updated_at)} for row in rows], "providers": provider_statuses()}
+
+
+@router.get("/integrations/{provider}/authorize")
+def authorize_integration(provider: str, current_user: User = Depends(get_current_user)):
+    if provider not in PROVIDERS: raise HTTPException(404, "Unsupported OAuth provider")
+    try:
+        return RedirectResponse(authorization_url(provider, create_oauth_state(current_user.id, provider)), status_code=302)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@router.get("/integrations/{provider}/callback")
+def integration_callback(provider: str, state: str = Query(...), code: str | None = Query(default=None), error: str | None = Query(default=None), db: Session = Depends(get_db)):
+    if provider not in PROVIDERS: raise HTTPException(404, "Unsupported OAuth provider")
+    try:
+        payload = decode_oauth_state(state, provider)
+        user = db.query(User).filter(User.id == int(payload["sub"])).first()
+        if not user: raise HTTPException(401, "OAuth user no longer exists")
+        if error or not code: raise RuntimeError(error or "Authorization code was not returned")
+        credentials, account = exchange_code(provider, code)
+        ciphertext = encrypt_credentials(credentials)
+    except (jwt.InvalidTokenError, KeyError, ValueError) as exc:
+        raise HTTPException(400, "Invalid or expired OAuth state") from exc
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    row = db.query(Integration).filter(Integration.user_id == user.id, Integration.provider == provider).first()
+    if not row:
+        row = Integration(public_id=_uuid(), user_id=user.id, provider=provider); db.add(row)
+    config = PROVIDERS[provider]
+    row.state, row.scopes, row.external_account = "connected", _json_dump(credentials.get("scope", config["scopes"]).split() if isinstance(credentials.get("scope"), str) else config["scopes"]), account
+    row.config_json = _json_dump({"credentials_ciphertext": ciphertext, "provider_metadata": {key: value for key, value in credentials.items() if key not in {"access_token", "refresh_token", "id_token"}}})
+    row.updated_at = datetime.utcnow(); db.commit()
+    frontend = os.environ.get("VERCEL_FRONTEND_URL", "").strip().rstrip("/") or "http://localhost:3000"
+    return RedirectResponse(f"{frontend}/integrations?connected={provider}", status_code=302)
+
+
+def _notion_title(item: dict) -> str:
+    for prop in (item.get("properties") or {}).values():
+        if prop.get("type") == "title":
+            title = "".join(part.get("plain_text", "") for part in prop.get("title", []))
+            if title.strip(): return title.strip()
+    return "Untitled Notion page"
+
+
+@router.post("/integrations/{provider}/sync")
+def sync_integration(provider: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(Integration).filter(Integration.user_id == current_user.id, Integration.provider == provider, Integration.state == "connected").first()
+    if not row: raise HTTPException(404, "Connected integration not found")
+    config = _json_load(row.config_json, {})
+    try:
+        credentials = decrypt_credentials(config.get("credentials_ciphertext", ""))
+        items, credentials = fetch_provider_items(provider, credentials)
+        config["credentials_ciphertext"] = encrypt_credentials(credentials)
+    except Exception as exc:
+        row.state = "error"; db.commit()
+        raise HTTPException(502, f"Integration sync failed: {type(exc).__name__}: {exc}") from exc
+    imported = skipped = 0
+    if provider == "notion":
+        for item in items:
+            url = str(item.get("url") or "")
+            if not url or db.query(KnowledgeItem).filter(KnowledgeItem.user_id == current_user.id, KnowledgeItem.url == url).first(): skipped += 1; continue
+            db.add(KnowledgeItem(public_id=_uuid(), user_id=current_user.id, kind="link", title=_notion_title(item)[:255], content="Imported from Notion", url=url, tags=_json_dump(["notion"]))); imported += 1
+    elif provider == "google-calendar":
+        for item in items:
+            event_id = str(item.get("id") or "")
+            marker = f"gcal:{event_id}"
+            if not event_id or db.query(WorkspaceTask).filter(WorkspaceTask.user_id == current_user.id, WorkspaceTask.tags.contains(marker)).first(): skipped += 1; continue
+            start = item.get("start") or {}; due_date = str(start.get("date") or start.get("dateTime") or "")[:10] or None
+            db.add(WorkspaceTask(public_id=_uuid(), user_id=current_user.id, title=str(item.get("summary") or "Calendar event")[:255], status="todo", priority="medium", due_date=due_date, tags=_json_dump(["google-calendar", marker]))); imported += 1
+    else:
+        raise HTTPException(400, "Unsupported sync provider")
+    row.state = "connected"; row.updated_at = datetime.utcnow(); config["last_sync_at"] = _iso(row.updated_at); row.config_json = _json_dump(config)
+    _add_activity(db, current_user.id, "integrations", "synced", "integration", row.public_id, f"{provider}: {imported} imported")
+    db.commit(); return {"ok": True, "provider": provider, "imported": imported, "skipped": skipped}
 
 
 @router.put("/integrations/{provider}")
@@ -578,13 +686,14 @@ def send_message(public_id: str, data: MessageCreate, current_user: User = Depen
     if not conversation: raise HTTPException(404, "Conversation not found")
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key: raise HTTPException(503, "AI service is not configured")
+    enforce_external_api_limit(db, current_user)
     user_message = AIMessage(public_id=_uuid(), conversation_id=conversation.id, user_id=current_user.id, role="user", content=data.content.strip())
     db.add(user_message); db.flush()
     previous = db.query(AIMessage).filter(AIMessage.user_id == current_user.id, AIMessage.conversation_id == conversation.id, AIMessage.id != user_message.id).order_by(AIMessage.id.desc()).limit(10).all()[::-1]
     context, citations = _copilot_context(db, current_user)
     client = anthropic.Anthropic(api_key=api_key)
     try:
-        response = client.messages.create(model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"), max_tokens=1200, system=f"You are Hua, a concise personal workspace copilot. Use only the authorized workspace context supplied. State uncertainty and never claim an action was taken.\n\nAUTHORIZED WORKSPACE CONTEXT:\n{context}", messages=[{"role": item.role, "content": item.content} for item in previous if item.role in ("user", "assistant")] + [{"role": "user", "content": data.content.strip()}])
+        response = client.messages.create(model=get_anthropic_model(), max_tokens=1200, system=f"You are Hua, a concise personal workspace copilot. Use only the authorized workspace context supplied. State uncertainty and never claim an action was taken.\n\nAUTHORIZED WORKSPACE CONTEXT:\n{context}", messages=[{"role": item.role, "content": item.content} for item in previous if item.role in ("user", "assistant")] + [{"role": "user", "content": data.content.strip()}])
         answer = response.content[0].text.strip()
         token_count = getattr(getattr(response, "usage", None), "output_tokens", 0) or 0
     except Exception as exc:

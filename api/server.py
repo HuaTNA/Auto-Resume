@@ -9,14 +9,16 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+import threading
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 # Ensure project root is in path
@@ -32,11 +34,15 @@ from src.ats_scorer import score_resume
 from src.cover_letter import generate_cover_letter
 from src.templates import list_templates
 from src.job_finder import search_adzuna, rank_jobs
+from src.pdf_renderer import render_latex_fallback
 
-from api.database import CareerApplication, CareerJob, HistoryRecord, Profile, User, get_db, init_db
+from api.database import CareerApplication, CareerJob, GenerationJob, HistoryRecord, IS_SQLITE, Profile, SessionLocal, User, get_db, init_db
 from api.dependencies import get_current_user
+from api.limits import enforce_external_api_limit
+from api.auth import get_secret_key
 from api.routes.auth import router as auth_router
 from api.routes.workspace import router as workspace_router
+from api.workflows.runner import run_due_automations
 
 
 def _get_cors_origins() -> list[str]:
@@ -104,9 +110,42 @@ app.include_router(auth_router)
 app.include_router(workspace_router)
 
 
+_local_scheduler_started = False
+
+
+def _local_scheduler_enabled() -> bool:
+    configured = os.environ.get("LOCAL_AUTOMATION_SCHEDULER", "").strip().lower()
+    if configured:
+        return configured in {"1", "true", "yes", "on"}
+    return IS_SQLITE and os.environ.get("PRODUCTION", "").strip().lower() not in {"1", "true", "yes", "on"}
+
+
+def _local_scheduler_loop() -> None:
+    try:
+        interval = max(10, min(int(os.environ.get("AUTOMATION_POLL_SECONDS", "30")), 300))
+    except ValueError:
+        interval = 30
+    while True:
+        db = SessionLocal()
+        try:
+            run_due_automations(db)
+        except Exception as exc:
+            db.rollback()
+            print(f"Local automation scheduler error: {type(exc).__name__}: {exc}")
+        finally:
+            db.close()
+        time.sleep(interval)
+
+
 @app.on_event("startup")
 def on_startup():
+    global _local_scheduler_started
     init_db()
+    get_secret_key()
+    if _local_scheduler_enabled() and not _local_scheduler_started:
+        threading.Thread(target=_local_scheduler_loop, name="hua-local-scheduler", daemon=True).start()
+        _local_scheduler_started = True
+    _resume_generation_jobs()
 
 
 def get_client() -> anthropic.Anthropic:
@@ -139,6 +178,24 @@ def _save_profile_db(user: User, db: Session, data: dict):
     profile_row.set_data(data)
     profile_row.updated_at = datetime.utcnow()
     db.commit()
+
+
+def _profile_completeness(profile: dict) -> dict:
+    personal = profile.get("personal") if isinstance(profile.get("personal"), dict) else {}
+    experiences = profile.get("experiences") if isinstance(profile.get("experiences"), list) else []
+    projects = profile.get("projects") if isinstance(profile.get("projects"), list) else []
+    bullet_count = sum(len(item.get("bullets", [])) for item in experiences + projects if isinstance(item, dict))
+    blocking = []
+    warnings = []
+    if not experiences and not projects:
+        blocking.append("Add at least one experience or project before generating.")
+    if bullet_count == 0:
+        blocking.append("Add at least one evidence bullet before generating.")
+    if not str(personal.get("name") or "").strip():
+        warnings.append("Add your name so the generated resume is complete.")
+    if not str(personal.get("email") or "").strip():
+        warnings.append("Add a contact email before applying.")
+    return {"ready": not blocking, "blocking": blocking, "warnings": warnings, "bullet_count": bullet_count}
 
 
 def _add_history_db(user: User, db: Session, jd_analysis: dict, ats_scores: dict = None,
@@ -226,9 +283,9 @@ def _is_duplicate_db(user: User, db: Session, company: str, job_title: str) -> b
 # ========== Request/Response Models ==========
 
 class JDInput(BaseModel):
-    jd_text: str
+    jd_text: str = Field(min_length=50, max_length=100_000)
     template: str = "classic"
-    top_k: int = 12
+    top_k: int = Field(default=12, ge=1, le=30)
     generate_cover_letter: bool = True
 
 
@@ -239,14 +296,26 @@ class RefineInput(BaseModel):
 
 
 class JobSearchInput(BaseModel):
-    query: str
-    location: str = "canada"
-    max_results: int = 20
-    top_n: int = 10
+    query: str = Field(min_length=1, max_length=200)
+    location: str = Field(default="canada", min_length=1, max_length=100)
+    max_results: int = Field(default=20, ge=1, le=50)
+    top_n: int = Field(default=10, ge=1, le=20)
 
 
 class StatusUpdate(BaseModel):
     status: str
+
+
+class HistoryInput(BaseModel):
+    jd_analysis: dict = Field(default_factory=dict)
+    ats_scores: dict = Field(default_factory=dict)
+    template: str = Field(default="classic", max_length=100)
+    resume_tex: str = Field(default="", max_length=500_000)
+    cover_letter: str = Field(default="", max_length=100_000)
+
+
+class PdfRecordInput(BaseModel):
+    record_id: int = Field(gt=0)
 
 
 # ========== Endpoints ==========
@@ -265,7 +334,7 @@ def root():
 def health():
     from api.database import IS_SQLITE
     db_type = "sqlite" if IS_SQLITE else "postgresql"
-    return {"status": "ok", "db": db_type}
+    return {"status": "ok", "db": db_type, "local_scheduler": _local_scheduler_started}
 
 
 @app.get("/api/profile")
@@ -285,6 +354,11 @@ def get_profile(
             "total_bullets": total_bullets,
         },
     }
+
+
+@app.get("/api/profile/completeness")
+def profile_completeness(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _profile_completeness(_load_profile_db(current_user, db))
 
 
 @app.put("/api/profile")
@@ -491,6 +565,7 @@ def api_parse_jd(
 ):
     """Parse a job description and return structured analysis."""
     client = get_client()
+    enforce_external_api_limit(db, current_user)
     original_len = len(data.jd_text)
     cleaned = clean_jd(data.jd_text)
     noise_removed = original_len - len(cleaned)
@@ -519,6 +594,7 @@ def api_retrieve_bullets(
 ):
     """Retrieve relevant bullets from profile for the JD."""
     client = get_client()
+    enforce_external_api_limit(db, current_user)
     profile = _load_profile_db(current_user, db)
     jd_analysis = data.get("jd_analysis", {})
     top_k = data.get("top_k", 12)
@@ -538,9 +614,11 @@ def api_retrieve_bullets(
 def api_generate(
     data: dict,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Generate resume (and optionally cover letter) from filtered profile + JD."""
     client = get_client()
+    enforce_external_api_limit(db, current_user, units=2 if data.get("generate_cover_letter", True) else 1)
     filtered_profile = data.get("filtered_profile", {})
     jd_analysis = data.get("jd_analysis", {})
     template_name = data.get("template", "classic")
@@ -563,9 +641,11 @@ def api_generate(
 def api_score(
     data: dict,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Score resume with ATS analysis."""
     client = get_client()
+    enforce_external_api_limit(db, current_user)
     resume_tex = data.get("resume_tex", "")
     jd_analysis = data.get("jd_analysis", {})
 
@@ -577,9 +657,11 @@ def api_score(
 def api_refine(
     data: dict,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Refine resume based on ATS feedback."""
     client = get_client()
+    enforce_external_api_limit(db, current_user)
     resume_tex = data.get("resume_tex", "")
     ats_feedback = data.get("ats_feedback", {})
     jd_analysis = data.get("jd_analysis", {})
@@ -600,6 +682,7 @@ def api_generate_full(
     Returns everything in one call.
     """
     client = get_client()
+    enforce_external_api_limit(db, current_user, units=8)
     profile = _load_profile_db(current_user, db)
 
     # Step 1: Clean & parse JD
@@ -697,6 +780,135 @@ def api_generate_full(
         "record_id": record["id"],
         "files": files,
     }
+
+
+def _generation_job_dict(job: GenerationJob, *, include_result: bool = True) -> dict:
+    result = json.loads(job.result_json or "{}") if include_result and job.result_json else None
+    return {
+        "id": job.public_id,
+        "status": job.status,
+        "step": job.step,
+        "progress": job.progress,
+        "record_id": job.history_record_id,
+        "result": result,
+        "error": job.error,
+        "created_at": job.created_at.isoformat(),
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+    }
+
+
+def _execute_generation_job(job_id: int) -> None:
+    db = SessionLocal()
+    try:
+        claimed = db.query(GenerationJob).filter(
+            GenerationJob.id == job_id,
+            GenerationJob.status == "queued",
+        ).update({
+            GenerationJob.status: "running",
+            GenerationJob.step: "generating",
+            GenerationJob.progress: 10,
+            GenerationJob.started_at: datetime.utcnow(),
+            GenerationJob.updated_at: datetime.utcnow(),
+        })
+        db.commit()
+        if claimed != 1:
+            return
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        user = db.query(User).filter(User.id == job.user_id).first()
+        if not user:
+            raise RuntimeError("Generation job user no longer exists")
+        request_data = JDInput(**json.loads(job.request_json))
+        result = api_generate_full(request_data, user, db)
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        job.status = "completed"
+        job.step = "completed"
+        job.progress = 100
+        job.result_json = json.dumps(result, ensure_ascii=False)
+        job.history_record_id = result["record_id"]
+        job.finished_at = datetime.utcnow()
+        job.updated_at = datetime.utcnow()
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.step = "failed"
+            job.error = f"{type(exc).__name__}: {exc}"[:2000]
+            job.finished_at = datetime.utcnow()
+            job.updated_at = datetime.utcnow()
+            db.commit()
+    finally:
+        db.close()
+
+
+def _resume_generation_jobs() -> None:
+    db = SessionLocal()
+    try:
+        stale_before = datetime.utcnow() - timedelta(hours=1)
+        db.query(GenerationJob).filter(
+            GenerationJob.status == "running",
+            GenerationJob.updated_at < stale_before,
+        ).update({
+            GenerationJob.status: "queued",
+            GenerationJob.step: "queued",
+            GenerationJob.progress: 0,
+        })
+        db.commit()
+        ids = [row.id for row in db.query(GenerationJob).filter(GenerationJob.status == "queued").limit(20).all()]
+    finally:
+        db.close()
+    for job_id in ids:
+        threading.Thread(target=_execute_generation_job, args=(job_id,), name=f"generation-{job_id}", daemon=True).start()
+
+
+@app.post("/api/generation-jobs", status_code=202)
+def create_generation_job(
+    data: JDInput,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    completeness = _profile_completeness(_load_profile_db(current_user, db))
+    if not completeness["ready"]:
+        raise HTTPException(status_code=422, detail=" ".join(completeness["blocking"]))
+    key = (idempotency_key or str(uuid4())).strip()
+    if not key or len(key) > 128:
+        raise HTTPException(status_code=400, detail="Idempotency-Key must be between 1 and 128 characters")
+    payload = data.model_dump() if hasattr(data, "model_dump") else data.dict()
+    request_json = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    existing = db.query(GenerationJob).filter(
+        GenerationJob.user_id == current_user.id,
+        GenerationJob.idempotency_key == key,
+    ).first()
+    if existing:
+        if json.dumps(json.loads(existing.request_json), ensure_ascii=False, sort_keys=True) != request_json:
+            raise HTTPException(status_code=409, detail="Idempotency-Key was already used for a different request")
+        return {"job": _generation_job_dict(existing)}
+    job = GenerationJob(
+        public_id=str(uuid4()),
+        user_id=current_user.id,
+        idempotency_key=key,
+        request_json=request_json,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    background_tasks.add_task(_execute_generation_job, job.id)
+    return {"job": _generation_job_dict(job)}
+
+
+@app.get("/api/generation-jobs/{public_id}")
+def get_generation_job(public_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    job = db.query(GenerationJob).filter(
+        GenerationJob.user_id == current_user.id,
+        GenerationJob.public_id == public_id,
+    ).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    return {"job": _generation_job_dict(job)}
 
 
 @app.get("/api/history")
@@ -825,20 +1037,35 @@ def api_update_history(
 
 @app.post("/api/history")
 def api_add_history(
-    data: dict,
+    data: HistoryInput,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Save a generation record to history."""
     record = _add_history_db(
         current_user, db,
-        jd_analysis=data.get("jd_analysis", {}),
-        ats_scores=data.get("ats_scores", {}),
-        template=data.get("template", "classic"),
-        resume_tex=data.get("resume_tex", ""),
-        cover_letter=data.get("cover_letter", ""),
+        jd_analysis=data.jd_analysis,
+        ats_scores=data.ats_scores,
+        template=data.template,
+        resume_tex=data.resume_tex,
+        cover_letter=data.cover_letter,
     )
     return {"ok": True, "record": record}
+
+
+_UNSAFE_LATEX = re.compile(
+    r"\\(?:input|include|includeonly|openin|openout|read|write|write18|"
+    r"immediate|catcode|newread|newwrite|everyjob|loop|repeat)\b",
+    re.IGNORECASE,
+)
+
+
+def _validate_latex_safety(tex_content: str) -> None:
+    if len(tex_content.encode("utf-8")) > 500_000:
+        raise HTTPException(status_code=413, detail="LaTeX document is too large")
+    match = _UNSAFE_LATEX.search(tex_content)
+    if match:
+        raise HTTPException(status_code=400, detail=f"Unsafe LaTeX command is not allowed: {match.group(0)}")
 
 
 def _compile_tex_to_pdf(tex_content: str) -> dict:
@@ -847,18 +1074,24 @@ def _compile_tex_to_pdf(tex_content: str) -> dict:
     import subprocess
     import tempfile
 
+    _validate_latex_safety(tex_content)
     with tempfile.TemporaryDirectory() as tmpdir:
         tex_path = Path(tmpdir) / "document.tex"
         tex_path.write_text(tex_content, encoding="utf-8")
 
         try:
             result = subprocess.run(
-                ["pdflatex", "-interaction=nonstopmode", "-output-directory", tmpdir, str(tex_path)],
-                capture_output=True, text=True, timeout=30, cwd=tmpdir
+                ["pdflatex", "-no-shell-escape", "-halt-on-error", "-interaction=nonstopmode", "-output-directory", tmpdir, str(tex_path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=tmpdir,
+                env={**os.environ, "openin_any": "p", "openout_any": "p", "TEXMFOUTPUT": tmpdir},
             )
             pdf_path = Path(tmpdir) / "document.pdf"
             if not pdf_path.exists():
-                return {"ok": False, "error": "PDF compilation failed", "log": result.stdout[-2000:]}
+                pdf_bytes = render_latex_fallback(tex_content)
+                return {"ok": True, "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"), "size": len(pdf_bytes), "renderer": "reportlab-fallback", "warning": "LaTeX compilation failed; a portable PDF was generated instead."}
 
             pdf_bytes = pdf_path.read_bytes()
             return {
@@ -867,22 +1100,20 @@ def _compile_tex_to_pdf(tex_content: str) -> dict:
                 "size": len(pdf_bytes),
             }
         except FileNotFoundError:
-            return {"ok": False, "error": "pdflatex not found. Install TeX Live or MiKTeX."}
+            pdf_bytes = render_latex_fallback(tex_content)
+            return {"ok": True, "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"), "size": len(pdf_bytes), "renderer": "reportlab-fallback"}
         except subprocess.TimeoutExpired:
             return {"ok": False, "error": "PDF compilation timed out"}
 
 
 def _wrap_cover_letter_tex(text: str) -> str:
     """Wrap plain-text cover letter in a clean LaTeX template."""
-    replacements = [
-        ("\\", "\\textbackslash{}"),
-        ("&", "\\&"), ("%", "\\%"), ("$", "\\$"), ("#", "\\#"),
-        ("_", "\\_"), ("{", "\\{"), ("}", "\\}"),
-        ("~", "\\textasciitilde{}"), ("^", "\\textasciicircum{}"),
-    ]
-    escaped = text
-    for old, new in replacements:
-        escaped = escaped.replace(old, new)
+    replacements = {
+        "\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$",
+        "#": r"\#", "_": r"\_", "{": r"\{", "}": r"\}",
+        "~": r"\textasciitilde{}", "^": r"\textasciicircum{}",
+    }
+    escaped = "".join(replacements.get(character, character) for character in text)
 
     paragraphs = escaped.split("\n\n")
     body = "\n\n".join(p.strip() for p in paragraphs if p.strip())
@@ -904,36 +1135,38 @@ def _wrap_cover_letter_tex(text: str) -> str:
 
 @app.post("/api/compile-pdf")
 def api_compile_pdf(
-    data: dict,
+    data: PdfRecordInput,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Compile LaTeX to PDF and return as base64."""
-    resume_tex = data.get("resume_tex", "")
-    if not resume_tex:
+    """Compile a saved resume owned by the current user."""
+    record = db.query(HistoryRecord).filter(HistoryRecord.id == data.record_id, HistoryRecord.user_id == current_user.id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Saved resume not found")
+    if not record.resume_tex:
         raise HTTPException(status_code=400, detail="No LaTeX content provided")
-
-    result = _compile_tex_to_pdf(resume_tex)
+    result = _compile_tex_to_pdf(record.resume_tex)
     if not result["ok"]:
-        if "not found" in result.get("error", ""):
-            raise HTTPException(status_code=500, detail=result["error"])
+        raise HTTPException(status_code=504, detail=result.get("error", "PDF compilation failed"))
     return result
 
 
 @app.post("/api/compile-cover-letter-pdf")
 def api_compile_cover_letter_pdf(
-    data: dict,
+    data: PdfRecordInput,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Compile plain-text cover letter to PDF."""
-    cover_letter = data.get("cover_letter", "")
-    if not cover_letter:
+    """Compile a saved cover letter owned by the current user."""
+    record = db.query(HistoryRecord).filter(HistoryRecord.id == data.record_id, HistoryRecord.user_id == current_user.id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Saved cover letter not found")
+    if not record.cover_letter:
         raise HTTPException(status_code=400, detail="No cover letter content provided")
-
-    tex = _wrap_cover_letter_tex(cover_letter)
+    tex = _wrap_cover_letter_tex(record.cover_letter)
     result = _compile_tex_to_pdf(tex)
     if not result["ok"]:
-        if "not found" in result.get("error", ""):
-            raise HTTPException(status_code=500, detail=result["error"])
+        raise HTTPException(status_code=504, detail=result.get("error", "PDF compilation failed"))
     return result
 
 
@@ -951,6 +1184,7 @@ def api_search_jobs(
             status_code=400,
             detail="ADZUNA_APP_ID and ADZUNA_APP_KEY must be set in .env"
         )
+    enforce_external_api_limit(db, current_user)
 
     profile = _load_profile_db(current_user, db)
 

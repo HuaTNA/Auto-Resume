@@ -15,6 +15,7 @@ from api.database import (
     WorkspaceActivity,
 )
 from api.workflows.scheduling import next_run_at
+from api.limits import enforce_external_api_limit
 from src.ats_scorer import score_resume
 from src.cover_letter import generate_cover_letter
 from src.generator import generate_resume
@@ -118,6 +119,7 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
     app_id, app_key = os.environ.get("ADZUNA_APP_ID", "").strip(), os.environ.get("ADZUNA_APP_KEY", "").strip()
     if not app_id or not app_key:
         raise RuntimeError("ADZUNA_APP_ID and ADZUNA_APP_KEY are not configured")
+    enforce_external_api_limit(db, user, units=2, check_burst=False)
 
     jobs = search_adzuna(query=query, location=location, app_id=app_id,
                          app_key=app_key, max_results=max_results, raise_on_error=True)
@@ -183,7 +185,7 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
             CareerApplication.user_id == user.id, CareerApplication.job_id == job.id
         ).first()
         created_application = False
-        qualifies = int(job_data.get("match_score") or 0) >= min_score or ranking_warning is not None
+        qualifies = _job_qualifies(job_data.get("match_score"), min_score, ranking_warning)
         if not application and qualifies:
             history = HistoryRecord(
                 user_id=user.id, timestamp=datetime.now().isoformat(),
@@ -275,6 +277,16 @@ def _source_key(job: dict) -> str:
     if identity == "|":
         identity = "|".join(str(job.get(key) or "").strip().lower() for key in ("company", "title", "location"))
     return hashlib.sha256(f"{job.get('source', 'adzuna')}|{identity}".encode()).hexdigest()
+
+
+def _job_qualifies(match_score, min_score: int, ranking_warning: str | None) -> bool:
+    """Never create review items from unranked fallback results."""
+    if ranking_warning is not None:
+        return False
+    try:
+        return int(match_score or 0) >= min_score
+    except (TypeError, ValueError):
+        return False
 
 
 def _notify(db: Session, user_id: int, kind: str, title: str, message: str, href: str) -> None:

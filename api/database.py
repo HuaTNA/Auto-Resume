@@ -387,6 +387,42 @@ class AIMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class DailyApiUsage(Base):
+    """Persistent per-user usage counter for server-funded external APIs."""
+
+    __tablename__ = "daily_api_usage"
+    __table_args__ = (UniqueConstraint("user_id", "usage_date", name="uq_daily_api_usage_user_date"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    usage_date = Column(String(10), nullable=False, index=True)
+    units = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class GenerationJob(Base):
+    """Durable, idempotent state for a complete resume generation run."""
+
+    __tablename__ = "generation_jobs"
+    __table_args__ = (UniqueConstraint("user_id", "idempotency_key", name="uq_generation_job_user_key"),)
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    idempotency_key = Column(String(128), nullable=False)
+    status = Column(String(32), default="queued", nullable=False, index=True)
+    step = Column(String(32), default="queued", nullable=False)
+    progress = Column(Integer, default=0, nullable=False)
+    request_json = Column(Text, default="{}", nullable=False)
+    result_json = Column(Text, default="{}", nullable=False)
+    error = Column(Text, nullable=True)
+    history_record_id = Column(Integer, ForeignKey("history_records.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 def _sync_sequences():
     """
     Sync PostgreSQL serial sequences with actual max IDs.

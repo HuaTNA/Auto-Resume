@@ -10,6 +10,7 @@ from pathlib import Path
 import anthropic
 
 from src.templates import get_template
+from src.ai_config import get_anthropic_model
 
 TEMPLATE_PATH = Path(__file__).parent.parent / "data" / "template.tex"
 
@@ -66,7 +67,7 @@ Instructions:
 - Do NOT wrap the output in markdown code fences."""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=4000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}]
@@ -109,7 +110,7 @@ IMPROVEMENT INSTRUCTIONS:
 6. Do NOT wrap output in markdown code fences."""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=4000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}]

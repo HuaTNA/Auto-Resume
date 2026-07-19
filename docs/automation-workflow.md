@@ -12,7 +12,9 @@ The job-search automation is a safe, review-first workflow:
 
 ## Scheduling
 
-Supported schedule values are `manual`, `hourly`, `daily@09:00`, and `weekly:0@09:00` (`0` is Monday). Run the scheduler locally or as a dedicated hosted worker:
+Supported schedule values are `manual`, `hourly`, `daily@09:00`, and `weekly:0@09:00` (`0` is Monday). In local SQLite development, the API automatically checks due automations every 30 seconds. Set `LOCAL_AUTOMATION_SCHEDULER=false` to disable this behavior.
+
+For a dedicated hosted worker, or when the API's local scheduler is disabled, run:
 
 ```bash
 python automation/runner.py --interval 30

@@ -7,6 +7,7 @@ Uses keyword matching + Claude semantic analysis.
 import json
 import re
 import anthropic
+from src.ai_config import get_anthropic_model
 
 
 def _extract_text_from_latex(latex: str) -> str:
@@ -87,7 +88,7 @@ Evaluate and return ONLY a JSON object (no markdown, no explanation):
 }}"""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=800,
         messages=[{"role": "user", "content": prompt}]
     )

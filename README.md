@@ -167,6 +167,9 @@ output/
 | POST   | `/api/score`                    | ATS score a resume             |
 | POST   | `/api/refine`                   | Refine resume with ATS feedback|
 | POST   | `/api/generate-full`            | Full pipeline in one call      |
+| POST   | `/api/generation-jobs`           | Queue an idempotent generation |
+| GET    | `/api/generation-jobs/{id}`      | Poll generation status/result  |
+| GET    | `/api/profile/completeness`      | Validate profile readiness     |
 | GET    | `/api/history`                  | List history (light)           |
 | GET    | `/api/history/{id}`             | Get record with full content   |
 | PATCH  | `/api/history/{id}`             | Update status                  |

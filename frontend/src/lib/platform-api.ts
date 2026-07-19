@@ -18,10 +18,18 @@ export interface PlatformDocument {
   source_record_id?: number; version_count: number; created_at: string; updated_at: string;
 }
 
+export interface PlatformDocumentVersion {
+  id: string; version_number: number; content: string; storage_path?: string; metadata: Record<string, unknown>; created_at: string;
+}
+
 export function listDocuments() { return request<{ documents: PlatformDocument[] }>("/api/documents"); }
 export function createDocument(input: { title: string; kind?: string; content?: string; metadata?: Record<string, unknown> }) {
   return request<{ document: PlatformDocument }>("/api/documents", { method: "POST", body: JSON.stringify(input) });
 }
+export function getDocument(id: string) { return request<{ document: PlatformDocument; versions: PlatformDocumentVersion[] }>(`/api/documents/${id}`); }
+export function updateDocument(id: string, patch: { title?: string; kind?: string; status?: string }) { return request<{ document: PlatformDocument }>(`/api/documents/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function createDocumentVersion(id: string, content: string) { return request<{ version: PlatformDocumentVersion }>(`/api/documents/${id}/versions`, { method: "POST", body: JSON.stringify({ content }) }); }
+export function deleteDocument(id: string) { return request<{ ok: true }>(`/api/documents/${id}`, { method: "DELETE" }); }
 
 export interface InterviewApplication { id: number; job_title: string; company: string; status: string; timestamp: string; }
 export interface InterviewNote { id: string; application_record_id: number; kind: string; title: string; content: string; created_at: string; updated_at: string; }
@@ -43,7 +51,10 @@ export function listNotifications(unreadOnly = false) { return request<{ notific
 export function markNotificationRead(id: string) { return request<{ ok: true }>(`/api/notifications/${id}/read`, { method: "PATCH" }); }
 
 export interface PlatformIntegration { id: string; provider: string; state: string; scopes: string[]; external_account?: string; updated_at: string; }
-export function listIntegrations() { return request<{ integrations: PlatformIntegration[] }>("/api/integrations"); }
+export interface IntegrationProvider { id: string; name: string; configured: boolean; scopes: string[]; }
+export function listIntegrations() { return request<{ integrations: PlatformIntegration[]; providers: IntegrationProvider[] }>("/api/integrations"); }
+export function integrationAuthorizeUrl(provider: string) { return `${getApiBase()}/api/integrations/${provider}/authorize`; }
+export function syncIntegration(provider: string) { return request<{ ok: true; provider: string; imported: number; skipped: number }>(`/api/integrations/${provider}/sync`, { method: "POST" }); }
 export function connectIntegration(provider: string, input: { scopes?: string[]; external_account?: string }) { return request<{ integration: PlatformIntegration }>(`/api/integrations/${provider}`, { method: "PUT", body: JSON.stringify({ ...input, state: "connected" }) }); }
 export function disconnectIntegration(provider: string) { return request<{ ok: true }>(`/api/integrations/${provider}`, { method: "DELETE" }); }
 

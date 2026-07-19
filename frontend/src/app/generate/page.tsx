@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import Header from "@/components/Header";
 import { BirchIcon } from "@/components/icons/BirchIcons";
-import { parseJD, retrieveBullets, generateResume, scoreResume, refineResume, saveHistory, compilePdf, compileCoverLetterPdf } from "@/lib/api";
+import { createGenerationJob, getGenerationJob, getProfileCompleteness, compilePdf, compileCoverLetterPdf } from "@/lib/api";
 import { useLanguage } from "@/lib/language-context";
 
 type Step = "input" | "parsing" | "bullets" | "generating" | "result";
@@ -37,111 +38,55 @@ export default function GeneratePage() {
 function GenerateContent() {
   const { text } = useLanguage();
   const searchParams = useSearchParams();
+  const requestedTemplate = searchParams.get("template");
+  const initialTemplate = requestedTemplate && ["classic", "modern", "consulting"].includes(requestedTemplate) ? requestedTemplate : "classic";
   const [step, setStep] = useState<Step>("input");
   const [jdText, setJdText] = useState("");
-  const [template, setTemplate] = useState("classic");
+  const [template, setTemplate] = useState(initialTemplate);
   const [genCoverLetter, setGenCoverLetter] = useState(true);
 
-  useEffect(() => {
-    const t = searchParams.get("template");
-    if (t && ["classic", "modern", "consulting"].includes(t)) {
-      setTemplate(t);
-    }
-  }, [searchParams]);
-
   // Pipeline data
-  const [jdAnalysis, setJdAnalysis] = useState<Record<string, any> | null>(null);
-  const [filteredProfile, setFilteredProfile] = useState<Record<string, any> | null>(null);
+  const [jdAnalysis, setJdAnalysis] = useState<Record<string, unknown> | null>(null);
   const [totalBullets, setTotalBullets] = useState(0);
   const [resumeTex, setResumeTex] = useState("");
   const [coverLetter, setCoverLetter] = useState("");
   const [atsResult, setAtsResult] = useState<ATSResult | null>(null);
   const [rounds, setRounds] = useState<{ round: number; overall: number }[]>([]);
+  const [historyRecordId, setHistoryRecordId] = useState<number | null>(null);
+  const [profileIssues, setProfileIssues] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
   const [previewTab, setPreviewTab] = useState<"resume" | "cover">("resume");
 
+  useEffect(() => {
+    getProfileCompleteness().then((result) => setProfileIssues([...(result.blocking || []), ...(result.warnings || [])])).catch(() => undefined);
+  }, []);
+
   async function handleGenerate() {
     if (!jdText.trim()) return;
     setError("");
+    setHistoryRecordId(null);
 
     try {
-      // Step 1: Parse JD
       setStep("parsing");
-      setStatusMsg("Parsing job description...");
-      const parseResult = await parseJD(jdText);
-      setJdAnalysis(parseResult.jd_analysis);
-
-      if (parseResult.is_duplicate) {
-        setStatusMsg("Warning: You already generated a resume for this role. Continuing...");
+      setStatusMsg("Queueing generation...");
+      const key = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      let job = (await createGenerationJob(jdText, template, genCoverLetter, key)).job;
+      while (job.status === "queued" || job.status === "running") {
+        setStep(job.status === "queued" ? "parsing" : "generating");
+        setStatusMsg(job.status === "queued" ? "Waiting for generation worker..." : `Generating application materials... ${job.progress}%`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        job = (await getGenerationJob(job.id)).job;
       }
-
-      // Step 2: Retrieve bullets
-      setStep("bullets");
-      setStatusMsg("Selecting relevant experience bullets...");
-      const bulletResult = await retrieveBullets(parseResult.jd_analysis, 12);
-      setFilteredProfile(bulletResult.filtered_profile);
-      setTotalBullets(bulletResult.total_selected);
-
-      // Step 3: Generate resume
-      setStep("generating");
-      setStatusMsg("Generating tailored resume...");
-      const genResult = await generateResume(
-        bulletResult.filtered_profile,
-        parseResult.jd_analysis,
-        template,
-        genCoverLetter
-      );
-      let currentTex = genResult.resume_tex;
-      setResumeTex(currentTex);
-      if (genResult.cover_letter) {
-        setCoverLetter(genResult.cover_letter);
-      }
-
-      // Step 4: ATS scoring + refinement
-      const thresholds = { overall: 80, keyword_pct: 60, relevance: 80, impact: 80 };
-      const maxRounds = 3;
-      const roundHistory: { round: number; overall: number }[] = [];
-      let lastAts: Record<string, any> | null = null;
-
-      for (let r = 1; r <= maxRounds; r++) {
-        setStatusMsg(`ATS analysis (round ${r}/${maxRounds})...`);
-        const scoreResult = await scoreResume(currentTex, parseResult.jd_analysis);
-        const ats = scoreResult.ats_result;
-        lastAts = ats;
-        setAtsResult(ats);
-
-        roundHistory.push({ round: r, overall: ats.semantic.overall_score });
-        setRounds([...roundHistory]);
-
-        const passed =
-          ats.semantic.overall_score >= thresholds.overall &&
-          ats.keyword_match.score >= thresholds.keyword_pct &&
-          ats.semantic.relevance_score >= thresholds.relevance &&
-          ats.semantic.impact_score >= thresholds.impact;
-
-        if (passed || r === maxRounds) break;
-
-        setStatusMsg(`Refining resume (round ${r + 1})...`);
-        const refineResult = await refineResume(
-          currentTex,
-          ats,
-          parseResult.jd_analysis,
-          bulletResult.filtered_profile
-        );
-        currentTex = refineResult.resume_tex;
-        setResumeTex(currentTex);
-      }
-
-      // Save to history
-      try {
-        if (lastAts) {
-          await saveHistory(parseResult.jd_analysis, lastAts, template, currentTex, genResult.cover_letter || "");
-        }
-      } catch {
-        // History save failure is non-critical
-      }
-
+      if (job.status !== "completed" || !job.result) throw new Error(job.error || "Generation failed");
+      const result = job.result;
+      setJdAnalysis(result.jd_analysis);
+      setTotalBullets((result.filtered_profile?.experiences || []).reduce((sum: number, item: { bullets?: unknown[] }) => sum + (item.bullets?.length || 0), 0) + (result.filtered_profile?.projects || []).reduce((sum: number, item: { bullets?: unknown[] }) => sum + (item.bullets?.length || 0), 0));
+      setResumeTex(result.resume_tex);
+      setCoverLetter(result.cover_letter || "");
+      setAtsResult(result.ats_result);
+      setRounds(result.optimization_rounds || []);
+      setHistoryRecordId(result.record_id);
       setStep("result");
       setStatusMsg("");
     } catch (e) {
@@ -154,11 +99,11 @@ function GenerateContent() {
     setStep("input");
     setJdText("");
     setJdAnalysis(null);
-    setFilteredProfile(null);
     setResumeTex("");
     setCoverLetter("");
     setAtsResult(null);
     setRounds([]);
+    setHistoryRecordId(null);
     setError("");
     setStatusMsg("");
     setPreviewTab("resume");
@@ -204,6 +149,7 @@ function GenerateContent() {
             {error}
           </div>
         )}
+        {step === "input" && profileIssues.length > 0 && <div className="mb-6 rounded-lg border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-4 text-xs"><p className="font-medium">{text("生成前建议完善", "Before generating")}</p><ul className="mt-2 list-disc space-y-1 pl-5">{profileIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
 
         {/* Step 1: Input */}
         {step === "input" && (
@@ -334,6 +280,7 @@ function GenerateContent() {
               <DownloadActions
                 resumeTex={resumeTex}
                 coverLetter={coverLetter}
+                recordId={historyRecordId}
                 onReset={handleReset}
               />
             </div>
@@ -419,10 +366,12 @@ function TabButton({ label, active = false, onClick }: { label: string; active?:
 function DownloadActions({
   resumeTex,
   coverLetter,
+  recordId,
   onReset,
 }: {
   resumeTex: string;
   coverLetter: string;
+  recordId: number | null;
   onReset: () => void;
 }) {
   const [pdfLoading, setPdfLoading] = useState<"resume" | "cover" | null>(null);
@@ -440,13 +389,17 @@ function DownloadActions({
   }
 
   async function handlePdf(type: "resume" | "cover", filename: string) {
+    if (!recordId) {
+      setPdfError("Save the result before compiling a PDF.");
+      return;
+    }
     setPdfLoading(type);
     setPdfError("");
     try {
       const result =
         type === "resume"
-          ? await compilePdf(resumeTex)
-          : await compileCoverLetterPdf(coverLetter);
+          ? await compilePdf(recordId)
+          : await compileCoverLetterPdf(recordId);
       if (result.ok) {
         const bytes = Uint8Array.from(atob(result.pdf_base64), (c) => c.charCodeAt(0));
         const blob = new Blob([bytes], { type: "application/pdf" });
@@ -477,7 +430,7 @@ function DownloadActions({
       {/* Resume downloads */}
       <button
         onClick={() => handlePdf("resume", "resume.pdf")}
-        disabled={pdfLoading !== null}
+        disabled={pdfLoading !== null || !recordId}
         className="w-full bg-[#1E1A14] text-[#F5EFE0] font-medium py-3 rounded-lg shadow-[0_2px_10px_rgba(30,26,20,0.07)] hover:bg-[#1E1A14]/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
       >
         <span className="latin text-[10px] uppercase tracking-[0.2em]">PDF</span>
@@ -490,13 +443,14 @@ function DownloadActions({
         <span className="latin text-[10px] uppercase tracking-[0.2em]">TEX</span>
         {text("下载 LaTeX 源文件", "Download LaTeX source")}
       </button>
+      {recordId && <Link href="/documents" className="secondary-button w-full justify-center">{text("编辑并保存新版本", "Edit and save a new version")}</Link>}
 
       {/* Cover letter downloads */}
       {coverLetter && (
         <>
           <button
             onClick={() => handlePdf("cover", "cover_letter.pdf")}
-            disabled={pdfLoading !== null}
+            disabled={pdfLoading !== null || !recordId}
             className="w-full bg-[#1E1A14] text-[#F5EFE0] font-medium py-3 rounded-lg hover:bg-[#1E1A14] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <span className="latin text-[10px] uppercase tracking-[0.2em]">PDF</span>
