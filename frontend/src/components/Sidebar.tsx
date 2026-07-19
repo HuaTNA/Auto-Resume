@@ -37,11 +37,11 @@ function NavLink({ item, compact = false, onClick }: { item: ModuleRoute; compac
     <Link
       href={item.href}
       onClick={onClick}
-      className={`group relative flex min-h-9 items-center gap-2.5 border-l-2 px-4 py-1.5 text-[13px] tracking-[0.01em] transition-colors ${
+      className={`group relative flex min-h-9 items-center gap-2.5 rounded-[6px] border-l-2 px-3 py-1.5 text-[12px] tracking-[0.02em] transition-colors ${
         active
           ? "border-[#1E1A14] bg-[rgba(30,26,20,0.07)] text-[#1E1A14]"
           : "border-transparent text-[#7A6A50] hover:bg-[rgba(30,26,20,0.04)] hover:text-[#1E1A14]"
-      } ${compact ? "pl-8 text-[12px]" : ""}`}
+      } ${compact ? "ml-3 min-h-8 pl-3 text-[11px]" : ""}`}
     >
       <span className={`flex shrink-0 items-center justify-center ${compact ? "size-6 rounded-[6px] bg-[#EBE2CC]" : "size-5"}`}>
         <BirchIcon name={item.icon} size={compact ? 14 : 16} />
@@ -52,7 +52,7 @@ function NavLink({ item, compact = false, onClick }: { item: ModuleRoute; compac
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="latin px-5 pb-1 pt-3 text-[8px] uppercase tracking-[0.34em] text-[#9A8468]">{children}</p>;
+  return <p className="latin px-3 pb-1 pt-4 text-[8px] uppercase tracking-[0.34em] text-[#9A8468]">{children}</p>;
 }
 
 export default function Sidebar() {
@@ -72,8 +72,8 @@ export default function Sidebar() {
   const operations = PRIMARY_MODULES.slice(6);
 
   return (
-    <aside className="workspace-sidebar hidden h-screen w-[220px] shrink-0 flex-col overflow-y-auto border-r border-[rgba(30,26,20,0.10)] bg-[#EDE7D3] lg:flex">
-      <div className="border-b border-[rgba(30,26,20,0.10)] px-5 pb-4 pt-5"><Brand /></div>
+    <aside className="workspace-sidebar hidden h-screen w-[232px] shrink-0 flex-col overflow-y-auto border-r border-[rgba(30,26,20,0.10)] bg-[#EDE7D3] lg:flex">
+      <div className="border-b border-[rgba(30,26,20,0.10)] px-5 pb-5 pt-5"><Brand /></div>
 
       <div className="px-3 py-2.5">
         <button
@@ -86,7 +86,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav aria-label={text("全局导航", "Global navigation")}>
+      <nav className="px-2 pb-4" aria-label={text("全局导航", "Global navigation")}>
         <SectionLabel>Workspace</SectionLabel>
         <NavLink item={home} />
         <div>
@@ -101,7 +101,7 @@ export default function Sidebar() {
               <span aria-hidden="true">{careerOpen ? "⌃" : "⌄"}</span>
             </button>
           </div>
-          {careerOpen && <div className="ml-3 border-l border-[rgba(30,26,20,0.10)]">{CAREER_ROUTES.map((item) => <NavLink key={item.id} item={item} compact />)}</div>}
+          {careerOpen && <div className="ml-3 border-l border-[rgba(30,26,20,0.10)] py-1">{CAREER_ROUTES.map((item) => <NavLink key={item.id} item={item} compact />)}</div>}
         </div>
         {workModules.map((item) => <NavLink key={item.id} item={item} />)}
 
