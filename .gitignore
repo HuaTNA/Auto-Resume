@@ -8,4 +8,5 @@ history/
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+deploy/cloud-run.env.yaml
 grep.exe.stackdump

@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.venv
+__pycache__
+*.py[cod]
+*.db
+data/auto_resume.db
+output
+history
+frontend/node_modules
+frontend/.next
+frontend/.env.local
+docs
+

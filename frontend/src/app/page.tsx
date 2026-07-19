@@ -8,6 +8,7 @@ import { BirchIcon } from "@/components/icons/BirchIcons";
 import { getHealth, getHistory } from "@/lib/api";
 import { useLanguage } from "@/lib/language-context";
 import { useWorkspace } from "@/lib/workspace-context";
+import { listNotifications, markNotificationRead, WorkspaceNotification } from "@/lib/platform-api";
 
 interface CareerRecord { id: number; job_title: string; company: string; status: string; timestamp: string; ats_scores: { overall: number | null } }
 function dateKey(offset = 0) { const date = new Date(); date.setDate(date.getDate() + offset); return date.toLocaleDateString("en-CA"); }
@@ -17,18 +18,20 @@ export default function CommandCenter() {
   const { text, language } = useLanguage();
   const [career, setCareer] = useState<CareerRecord[]>([]);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const today = dateKey();
 
   useEffect(() => {
     getHistory().then((result) => setCareer(result.records ?? [])).catch(() => setCareer([]));
     getHealth().then(() => setBackendOnline(true)).catch(() => setBackendOnline(false));
+    listNotifications(true).then((result) => setNotifications(result.notifications)).catch(() => setNotifications([]));
   }, []);
 
   const todayTasks = tasks.filter((task) => task.status === "todo" && (!task.due_date || task.due_date === today)).slice(0, 5);
   const upcoming = tasks.filter((task) => task.status === "todo" && task.due_date && task.due_date > today).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 4);
   const activeProjects = projects.filter((project) => project.status === "active" || project.status === "blocked").slice(0, 3);
-  const activeApplications = career.filter((record) => ["generated", "applied", "interview"].includes(record.status)).slice(0, 3);
+  const activeApplications = career.filter((record) => ["suggested", "generated", "applied", "interview"].includes(record.status)).slice(0, 3);
   const suggestions = useMemo(() => {
     const items: Array<{ title: string; detail: string; href: string }> = [];
     const overdue = tasks.filter((task) => task.status === "todo" && task.due_date && task.due_date < today).length;
@@ -74,6 +77,8 @@ export default function CommandCenter() {
           <Section title={text("最近活动", "Recent Activity")} eyebrow={text("跨模块变化", "Across the workspace")}>
             {activities.length === 0 ? <p className="rounded-[16px] border border-[rgba(30,26,20,0.12)] px-4 py-5 text-center text-[11px] text-[#7A6A50]">{text("创建项目、任务或知识后，活动会出现在这里。", "Changes to projects, tasks, and knowledge will appear here.")}</p> : <div className="space-y-3">{activities.slice(0, 5).map((item) => <div key={item.id} className="flex items-start gap-3"><span className="mt-1.5 size-1.5 bg-[#B8A98A]" /><div className="min-w-0"><p className="truncate text-xs">{item.title}</p><p className="latin mt-0.5 text-[9px] uppercase tracking-[0.22em] text-[#9A8468]">{item.module} · {item.action}</p></div></div>)}</div>}
           </Section>
+
+          {notifications.length > 0 && <Section title={text("通知", "Notifications")} eyebrow={`${notifications.length} ${text("条未读", "unread")}`}><div className="space-y-2">{notifications.slice(0, 5).map((item) => <Link key={item.id} href={item.href || "/automations"} onClick={() => { void markNotificationRead(item.id); setNotifications((current) => current.filter((entry) => entry.id !== item.id)); }} className="block rounded-[12px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4"><p className="text-xs font-medium">{item.title}</p><p className="mt-1 text-[10px] leading-5 text-[#7A6A50]">{item.message}</p></Link>)}</div></Section>}
 
           <div className="flex items-center gap-3 rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4"><span className={`size-2.5 ${backendOnline === null ? "bg-[#9A8468]" : backendOnline ? "bg-[#B8A98A]" : "bg-[#1E1A14]"}`} /><div className="flex-1"><p className="text-xs font-medium">{text("工作区服务", "Workspace services")}</p><p className="mt-0.5 text-[10px] text-[#7A6A50]">{backendOnline === null ? text("正在检查…", "Checking…") : backendOnline ? text("在线，自动化可连接", "Online, ready for automations") : text("离线，部分职业功能不可用", "Offline, some Career features are unavailable")}</p></div><Link href="/automations" className="text-[10px] text-[#1E1A14] underline decoration-[#B8A98A] underline-offset-4">{text("查看", "View")}</Link></div>
         </div>

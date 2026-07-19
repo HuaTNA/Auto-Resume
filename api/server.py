@@ -11,6 +11,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
@@ -32,9 +33,10 @@ from src.cover_letter import generate_cover_letter
 from src.templates import list_templates
 from src.job_finder import search_adzuna, rank_jobs
 
-from api.database import HistoryRecord, Profile, User, get_db, init_db
+from api.database import CareerApplication, CareerJob, HistoryRecord, Profile, User, get_db, init_db
 from api.dependencies import get_current_user
 from api.routes.auth import router as auth_router
+from api.routes.workspace import router as workspace_router
 
 
 def _get_cors_origins() -> list[str]:
@@ -99,6 +101,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(workspace_router)
 
 
 @app.on_event("startup")
@@ -164,7 +167,51 @@ def _add_history_db(user: User, db: Session, jd_analysis: dict, ats_scores: dict
     db.add(record)
     db.commit()
     db.refresh(record)
+    _ensure_career_application_db(user, db, record)
     return record.to_dict()
+
+
+def _ensure_career_application_db(user: User, db: Session, record: HistoryRecord) -> CareerApplication:
+    """Mirror a legacy history record into normalized Career tables."""
+    application = db.query(CareerApplication).filter(
+        CareerApplication.user_id == user.id,
+        CareerApplication.history_record_id == record.id,
+    ).first()
+    if application:
+        if application.status != record.status:
+            application.status = record.status
+            application.updated_at = datetime.utcnow()
+            db.commit()
+        return application
+
+    job = db.query(CareerJob).filter(
+        CareerJob.user_id == user.id,
+        CareerJob.company == record.company,
+        CareerJob.title == record.job_title,
+    ).first()
+    if not job:
+        job = CareerJob(
+            public_id=str(uuid4()),
+            user_id=user.id,
+            title=record.job_title,
+            company=record.company,
+            seniority=record.seniority or "",
+            required_skills=record.required_skills or "[]",
+        )
+        db.add(job)
+        db.flush()
+
+    application = CareerApplication(
+        public_id=str(uuid4()),
+        user_id=user.id,
+        job_id=job.id,
+        history_record_id=record.id,
+        status=record.status,
+    )
+    db.add(application)
+    db.commit()
+    db.refresh(application)
+    return application
 
 
 def _is_duplicate_db(user: User, db: Session, company: str, job_title: str) -> bool:
@@ -216,9 +263,9 @@ def root():
 
 @app.get("/api/health")
 def health():
-    from api.database import DB_URL, IS_SQLITE
+    from api.database import IS_SQLITE
     db_type = "sqlite" if IS_SQLITE else "postgresql"
-    return {"status": "ok", "db": db_type, "db_url_prefix": DB_URL[:30] + "..."}
+    return {"status": "ok", "db": db_type}
 
 
 @app.get("/api/profile")
@@ -664,13 +711,19 @@ def api_history(
         .order_by(HistoryRecord.id.desc())
         .all()
     )
+    for record in db_records:
+        _ensure_career_application_db(current_user, db, record)
     records = [r.to_dict() for r in db_records]
+    applications = db.query(CareerApplication).filter(CareerApplication.user_id == current_user.id).all()
+    application_by_history = {item.history_record_id: item for item in applications}
 
     light_records = []
     for r in records:
         lr = {k: v for k, v in r.items() if k not in ("resume_tex", "cover_letter")}
         lr["has_resume"] = bool(r.get("resume_tex"))
         lr["has_cover_letter"] = bool(r.get("cover_letter"))
+        application = application_by_history.get(r["id"])
+        lr["approval_status"] = application.approval_status if application else None
         light_records.append(lr)
 
     scores = [r["ats_scores"]["overall"] for r in records
@@ -704,6 +757,44 @@ def api_get_record(
     return {"record": record.to_dict()}
 
 
+@app.get("/api/career/applications")
+def api_career_applications(
+    status: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Normalized application list while legacy history routes remain compatible."""
+    records = db.query(HistoryRecord).filter(HistoryRecord.user_id == current_user.id).all()
+    for record in records:
+        _ensure_career_application_db(current_user, db, record)
+
+    query = db.query(CareerApplication, CareerJob).join(
+        CareerJob, CareerApplication.job_id == CareerJob.id
+    ).filter(CareerApplication.user_id == current_user.id)
+    if status:
+        query = query.filter(CareerApplication.status == status)
+    rows = query.order_by(CareerApplication.updated_at.desc()).all()
+    return {
+        "applications": [
+            {
+                "id": application.public_id,
+                "legacy_record_id": application.history_record_id,
+                "status": application.status,
+                "created_at": application.created_at.isoformat(),
+                "updated_at": application.updated_at.isoformat(),
+                "job": {
+                    "id": job.public_id,
+                    "title": job.title,
+                    "company": job.company,
+                    "seniority": job.seniority,
+                    "required_skills": json.loads(job.required_skills or "[]"),
+                },
+            }
+            for application, job in rows
+        ]
+    }
+
+
 @app.patch("/api/history/{record_id}")
 def api_update_history(
     record_id: int,
@@ -712,7 +803,7 @@ def api_update_history(
     db: Session = Depends(get_db),
 ):
     """Update application status."""
-    valid = ("generated", "applied", "interview", "rejected", "offer")
+    valid = ("suggested", "generated", "applied", "interview", "rejected", "offer")
     if data.status not in valid:
         raise HTTPException(
             status_code=400,
@@ -728,6 +819,7 @@ def api_update_history(
 
     record.status = data.status
     db.commit()
+    _ensure_career_application_db(current_user, db, record)
     return {"ok": True}
 
 
