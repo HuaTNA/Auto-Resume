@@ -42,7 +42,7 @@ from api.dependencies import get_current_user
 from api.limits import enforce_external_api_limit
 from api.auth import create_oauth_state, decode_oauth_state
 from api.oauth import PROVIDERS, authorization_url, decrypt_credentials, encrypt_credentials, exchange_code, fetch_provider_items, provider_statuses
-from api.workflows.job_search import execute_automation, generate_application_materials, run_to_dict
+from api.workflows.job_search import ensure_application_for_job, execute_automation, generate_application_materials, run_to_dict
 from api.workflows.runner import run_due_automations
 from api.workflows.scheduling import next_run_at
 from src.ai_config import get_anthropic_model
@@ -499,6 +499,21 @@ def generate_suggested_materials(record_id: int, current_user: User = Depends(ge
     except Exception as exc:
         db.rollback(); raise HTTPException(502, f"Material generation failed: {type(exc).__name__}: {exc}") from exc
     return {"ok": True, "record": history.to_dict()}
+
+
+@router.post("/career/jobs/{public_id}/generate-materials")
+def generate_selected_job_materials(public_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    job = db.query(CareerJob).filter(CareerJob.user_id == current_user.id, CareerJob.public_id == public_id).first()
+    if not job: raise HTTPException(404, "Job not found")
+    application = ensure_application_for_job(db, current_user, job)
+    existing = db.query(HistoryRecord).filter(HistoryRecord.user_id == current_user.id, HistoryRecord.id == application.history_record_id).first()
+    if not existing or not existing.resume_tex:
+        enforce_external_api_limit(db, current_user, units=3, check_burst=True)
+    try:
+        history = generate_application_materials(db, current_user, application)
+    except Exception as exc:
+        db.rollback(); raise HTTPException(502, f"Material generation failed: {type(exc).__name__}: {exc}") from exc
+    return {"ok": True, "application_record_id": history.id, "record": history.to_dict()}
 
 
 @router.post("/career/history/{record_id}/approve")

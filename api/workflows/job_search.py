@@ -98,6 +98,39 @@ def generate_application_materials(db: Session, user: User,
     return db.query(HistoryRecord).filter(HistoryRecord.id == application.history_record_id).first()
 
 
+def ensure_application_for_job(db: Session, user: User, job: CareerJob) -> CareerApplication:
+    """Create the review boundary needed for a user-selected job, if absent."""
+    application = db.query(CareerApplication).filter(
+        CareerApplication.user_id == user.id,
+        CareerApplication.job_id == job.id,
+    ).first()
+    if application:
+        return application
+
+    latest_match = db.query(CareerJobMatch).filter(
+        CareerJobMatch.user_id == user.id,
+        CareerJobMatch.job_id == job.id,
+    ).order_by(CareerJobMatch.id.desc()).first()
+    match_score = int(latest_match.match_score or 0) if latest_match else 0
+    history = HistoryRecord(
+        user_id=user.id, timestamp=datetime.now().isoformat(),
+        job_title=job.title, company=job.company, seniority="",
+        required_skills="[]", template="classic",
+        ats_scores=_dump({"overall": match_score}), output_files="[]",
+        resume_tex="", cover_letter="", status="suggested",
+    )
+    db.add(history); db.flush()
+    application = CareerApplication(
+        public_id=str(uuid4()), user_id=user.id, job_id=job.id,
+        history_record_id=history.id, status="suggested",
+        approval_status="pending", match_score=match_score,
+        automation_id=latest_match.automation_id if latest_match else None,
+    )
+    db.add(application); db.flush()
+    _activity(db, user.id, application.public_id, f"Review {job.title} at {job.company}")
+    return application
+
+
 def _workspace_snapshot(db: Session, user: User) -> tuple[dict, dict]:
     from api.database import KnowledgeItem, WorkspaceProject, WorkspaceTask
     counts = {

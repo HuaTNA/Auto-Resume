@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import { EmptyState, Section, StatusPill, WorkspacePage } from "@/components/workspace/WorkspaceUI";
-import { AutomationJobResult, AutomationRun, listAutomations } from "@/lib/platform-api";
+import { AutomationJobResult, AutomationRun, generateJobMaterials, listAutomations } from "@/lib/platform-api";
 import { useLanguage } from "@/lib/language-context";
 
 type SourceFilter = "all" | "indeed" | "adzuna";
@@ -15,6 +15,9 @@ export default function JobsPage() {
   const [source, setSource] = useState<SourceFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState("");
 
   useEffect(() => {
     listAutomations()
@@ -23,7 +26,7 @@ export default function JobsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const jobs = useMemo(() => {
+  const allJobs = useMemo(() => {
     const seen = new Set<string>();
     const results: AutomationJobResult[] = [];
     for (const run of runs) {
@@ -34,13 +37,50 @@ export default function JobsPage() {
         results.push(job);
       }
     }
-    return source === "all" ? results : results.filter((job) => job.source === source);
-  }, [runs, source]);
+    return results;
+  }, [runs]);
+
+  const jobs = useMemo(
+    () => source === "all" ? allJobs : allJobs.filter((job) => job.source === source),
+    [allJobs, source],
+  );
 
   const warnings = useMemo(
     () => Array.from(new Set(runs.flatMap((run) => run.result?.source_warnings ?? []))),
     [runs],
   );
+
+  function toggleJob(jobId: string) {
+    setSelected((items) => items.includes(jobId) ? items.filter((id) => id !== jobId) : [...items, jobId]);
+  }
+
+  async function generateSelected() {
+    if (selected.length === 0 || generating) return;
+    if (!confirm(text(`为选中的 ${selected.length} 个职位生成定制简历和求职信？`, `Generate a tailored resume and cover letter for ${selected.length} selected job(s)?`))) return;
+    setGenerating(true);
+    setError("");
+    const failed: string[] = [];
+    for (const [index, jobId] of selected.entries()) {
+      const job = allJobs.find((item) => item.job_id === jobId);
+      setProgress(text(`正在生成 ${index + 1}/${selected.length}：${job?.title || "职位"}`, `Generating ${index + 1}/${selected.length}: ${job?.title || "job"}`));
+      try {
+        const result = await generateJobMaterials(jobId);
+        setRuns((items) => items.map((run) => run.result ? {
+          ...run,
+          result: {
+            ...run.result,
+            jobs: run.result.jobs?.map((item) => item.job_id === jobId ? { ...item, application_record_id: result.application_record_id, materials_generated: true } : item),
+          },
+        } : run));
+      } catch (reason) {
+        failed.push(jobId);
+        setError(reason instanceof Error ? reason.message : "Material generation failed");
+      }
+    }
+    setSelected(failed);
+    setProgress(failed.length > 0 ? text(`${failed.length} 个职位生成失败，可重试。`, `${failed.length} job(s) failed and remain selected for retry.`) : text("材料已生成，可前往申请页面查看。", "Materials are ready in Applications."));
+    setGenerating(false);
+  }
 
   return (
     <>
@@ -57,13 +97,19 @@ export default function JobsPage() {
           title={text("搜索结果", "Search results")}
           eyebrow={loading ? "—" : `${jobs.length}`}
           action={
-            <div className="flex gap-2">
-              {(["all", "indeed", "adzuna"] as const).map((item) => (
-                <button key={item} onClick={() => setSource(item)} className={`rounded-[6px] px-3 py-1 text-[10px] capitalize ${source === item ? "bg-[#1E1A14] text-[#F5EFE0]" : "bg-[#EBE2CC] text-[#7A6A50]"}`}>{item}</button>
-              ))}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex gap-2">
+                {(["all", "indeed", "adzuna"] as const).map((item) => (
+                  <button key={item} onClick={() => setSource(item)} className={`rounded-[6px] px-3 py-1 text-[10px] capitalize ${source === item ? "bg-[#1E1A14] text-[#F5EFE0]" : "bg-[#EBE2CC] text-[#7A6A50]"}`}>{item}</button>
+                ))}
+              </div>
+              <button onClick={generateSelected} disabled={selected.length === 0 || generating} className="primary-button min-h-9 px-3 py-1 text-[10px] disabled:opacity-40">
+                {generating ? text("生成中…", "Generating…") : text(`生成材料 (${selected.length})`, `Generate materials (${selected.length})`)}
+              </button>
             </div>
           }
         >
+          {progress && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#EBE2CC] p-3 text-xs"><span>{progress}</span>{!generating && selected.length === 0 && <Link href="/career/applications" className="underline underline-offset-4">{text("查看申请与材料", "View applications and materials")} →</Link>}</div>}
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-40 animate-pulse rounded-[16px] bg-[rgba(30,26,20,0.05)]" />)}</div>
           ) : jobs.length === 0 ? (
@@ -71,7 +117,16 @@ export default function JobsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {jobs.map((job, index) => (
-                <article key={job.job_id || `${job.url}-${index}`} className="flex flex-col rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-5">
+                <article key={job.job_id || `${job.url}-${index}`} className={`flex flex-col rounded-[16px] border bg-[#F5EFE0] p-5 ${job.job_id && selected.includes(job.job_id) ? "border-[#1E1A14] shadow-[0_0_0_1px_#1E1A14]" : "border-[rgba(30,26,20,0.12)]"}`}>
+                  <label className="mb-3 flex w-fit items-center gap-2 text-[10px] text-[#7A6A50]">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(job.job_id && selected.includes(job.job_id))}
+                      disabled={!job.job_id || job.materials_generated || generating}
+                      onChange={() => job.job_id && toggleJob(job.job_id)}
+                    />
+                    <span>{job.materials_generated ? text("材料已生成", "Materials generated") : text("选择生成材料", "Select for materials")}</span>
+                  </label>
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-medium">{job.title}</h3>
@@ -83,6 +138,7 @@ export default function JobsPage() {
                     <StatusPill tone={job.source === "indeed" ? "success" : "neutral"}>{sourceName(job.source)}</StatusPill>
                     {job.is_new && <StatusPill tone="success">New</StatusPill>}
                     {job.application_record_id && <StatusPill tone="neutral">Review</StatusPill>}
+                    {job.materials_generated && <StatusPill tone="brand">Materials ready</StatusPill>}
                   </div>
                   {job.match_reason && <p className="mt-3 line-clamp-2 text-[10px] leading-5 text-[#7A6A50]">{job.match_reason}</p>}
                   {salary(job) && <p className="mt-2 text-[10px] text-[#9A8468]">{salary(job)}</p>}
