@@ -59,7 +59,7 @@ export default function JobsPage() {
           action={
             <div className="flex gap-2">
               {(["all", "indeed", "adzuna"] as const).map((item) => (
-                <button key={item} onClick={() => setSource(item)} className={`rounded-full px-3 py-1 text-[10px] capitalize ${source === item ? "bg-[#1E1A14] text-[#F5EFE0]" : "bg-[#EBE2CC] text-[#7A6A50]"}`}>{item}</button>
+                <button key={item} onClick={() => setSource(item)} className={`rounded-[6px] px-3 py-1 text-[10px] capitalize ${source === item ? "bg-[#1E1A14] text-[#F5EFE0]" : "bg-[#EBE2CC] text-[#7A6A50]"}`}>{item}</button>
               ))}
             </div>
           }
