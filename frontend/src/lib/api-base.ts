@@ -2,7 +2,7 @@
  * Resolve the API origin.
  *
  * Production uses same-origin `/api` requests and Next.js rewrites them to the
- * Cloud Run backend. This keeps authentication cookies first-party. Local
+ * Vercel FastAPI backend. This keeps authentication cookies first-party. Local
  * development continues to talk directly to FastAPI on port 8000.
  */
 export function getApiBase(): string {
@@ -19,4 +19,3 @@ export function getApiBase(): string {
 
   return process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:8000";
 }
-

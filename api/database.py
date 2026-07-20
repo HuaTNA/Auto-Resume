@@ -54,6 +54,15 @@ engine_kwargs = {"echo": False}
 if IS_SQLITE:
     # Required for FastAPI threading with SQLite.
     engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Keep each serverless instance's local pool deliberately small. Supabase's
+    # transaction pooler multiplexes these client connections across Postgres.
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": max(1, int(os.environ.get("DB_POOL_SIZE", "3"))),
+        "max_overflow": max(0, int(os.environ.get("DB_MAX_OVERFLOW", "2"))),
+    })
 
 engine = create_engine(DB_URL, **engine_kwargs)
 

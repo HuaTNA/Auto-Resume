@@ -251,4 +251,4 @@ Scheduled career discovery, deduplication, review items, material generation, re
 - [ ] Vertex AI embeddings for better retrieval
 - [ ] LinkedIn profile import
 - [ ] Batch resume generation
-- [ ] Deploy to Vercel + Railway
+- [ ] Deploy frontend and FastAPI to Vercel with Supabase PostgreSQL
