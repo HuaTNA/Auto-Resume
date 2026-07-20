@@ -6,7 +6,10 @@
  * development continues to talk directly to FastAPI on port 8000.
  */
 export function getApiBase(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
+  // Production must stay same-origin so auth cookies belong to the frontend
+  // domain and `/api` is routed by the server-side BACKEND_URL rewrite. Ignore
+  // stale public API variables that may still exist in Vercel project settings.
+  if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
   }
 
