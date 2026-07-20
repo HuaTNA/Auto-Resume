@@ -20,7 +20,7 @@ from src.ats_scorer import score_resume
 from src.cover_letter import generate_cover_letter
 from src.generator import generate_resume
 from src.jd_parser import clean_jd, parse_jd
-from src.job_finder import rank_jobs, search_adzuna
+from src.job_finder import rank_jobs, search_jobs
 from src.retriever import retrieve_relevant_content
 
 
@@ -116,13 +116,19 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
     max_results = _bounded(config.get("max_results"), 20, 1, 50)
     top_n = _bounded(config.get("top_n"), 10, 1, 20)
     min_score = _bounded(config.get("min_match_score"), 60, 0, 100)
+    configured_sources = config.get("sources", ["indeed", "adzuna"])
+    if not isinstance(configured_sources, list):
+        configured_sources = ["indeed", "adzuna"]
+    sources = [source for source in configured_sources if source in {"indeed", "adzuna"}]
+    if not sources:
+        sources = ["indeed", "adzuna"]
     app_id, app_key = os.environ.get("ADZUNA_APP_ID", "").strip(), os.environ.get("ADZUNA_APP_KEY", "").strip()
-    if not app_id or not app_key:
-        raise RuntimeError("ADZUNA_APP_ID and ADZUNA_APP_KEY are not configured")
-    enforce_external_api_limit(db, user, units=2, check_burst=False)
+    enforce_external_api_limit(db, user, units=max(1, len(sources)), check_burst=False)
 
-    jobs = search_adzuna(query=query, location=location, app_id=app_id,
-                         app_key=app_key, max_results=max_results, raise_on_error=True)
+    jobs, source_warnings = search_jobs(
+        query=query, location=location, sources=sources, app_id=app_id,
+        app_key=app_key, max_results=max_results,
+    )
     profile_row = db.query(Profile).filter(Profile.user_id == user.id).first()
     profile = profile_row.get_data() if profile_row else {}
     client = None
@@ -136,10 +142,11 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
             jobs = jobs[:top_n]
     else:
         jobs = jobs[:top_n]
-        ranking_warning = "AI ranking is not configured; using Adzuna relevance."
+        ranking_warning = "AI ranking is not configured; using source relevance."
     for job in jobs:
         job.setdefault("match_score", 0)
-        job.setdefault("match_reason", "Adzuna relevance result")
+        source_label = str(job.get("source") or "job board").title()
+        job.setdefault("match_reason", f"{source_label} relevance result")
 
     new_count = duplicate_count = application_count = material_count = 0
     output_jobs = []
@@ -219,9 +226,15 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
                        "materials_generated": generated or (application is not None and _has_materials(db, application))})
         output_jobs.append(output)
 
+    source_counts = {
+        source: sum(1 for job in jobs if job.get("source") == source)
+        for source in sources
+    }
     counts = {"found": len(jobs), "new_jobs": new_count, "duplicates": duplicate_count,
-              "applications": application_count, "materials": material_count}
+              "applications": application_count, "materials": material_count,
+              **{f"source_{source}": count for source, count in source_counts.items()}}
     return counts, {"query": query, "location": location, "jobs": output_jobs,
+                    "sources": sources, "source_warnings": source_warnings,
                     "ranking_warning": ranking_warning, "approval_required": True}
 
 

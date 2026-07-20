@@ -1,10 +1,12 @@
 """
 job_finder.py
-Searches for relevant jobs from free APIs and scores them against the user's profile.
-Supported sources: Adzuna (free API key required).
+Searches for relevant jobs and scores them against the user's profile.
+Supported sources: Indeed via JobSpy and Adzuna (free API key required).
 """
 
 import json
+import math
+import re
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -13,6 +15,78 @@ from src.ai_config import get_anthropic_model
 
 
 ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
+
+
+def search_indeed(query: str, location: str = "canada", max_results: int = 20,
+                  raise_on_error: bool = False) -> list[dict]:
+    """Search Indeed through JobSpy and normalize results to the shared job shape."""
+    try:
+        from jobspy import scrape_jobs
+
+        frame = scrape_jobs(
+            site_name=["indeed"],
+            search_term=query,
+            location=location,
+            country_indeed=_indeed_country(location),
+            results_wanted=min(max_results, 50),
+        )
+    except Exception as exc:
+        print(f"  Indeed/JobSpy error: {exc}")
+        if raise_on_error:
+            raise RuntimeError(f"Indeed/JobSpy error: {exc}") from exc
+        return []
+
+    jobs = []
+    for item in frame.to_dict(orient="records"):
+        url = _clean_value(item.get("job_url"))
+        external_id = _clean_value(item.get("id")) or _indeed_job_key(url)
+        jobs.append({
+            "external_id": external_id,
+            "title": _clean_value(item.get("title")),
+            "company": _clean_value(item.get("company")) or "Unknown",
+            "location": _clean_value(item.get("location")),
+            "description": _clean_value(item.get("description")),
+            "url": url,
+            "salary_min": _clean_number(item.get("min_amount")),
+            "salary_max": _clean_number(item.get("max_amount")),
+            "created": _clean_value(item.get("date_posted")),
+            "source": "indeed",
+        })
+    return [job for job in jobs if job["title"] and job["url"]]
+
+
+def search_jobs(query: str, location: str = "canada", sources: list[str] | None = None,
+                app_id: str = "", app_key: str = "", max_results: int = 20) -> tuple[list[dict], list[str]]:
+    """Search configured sources, preferring Indeed when the same role appears twice."""
+    requested = sources or ["indeed", "adzuna"]
+    results: list[dict] = []
+    warnings: list[str] = []
+
+    if "indeed" in requested:
+        try:
+            results.extend(search_indeed(query, location, max_results=max_results, raise_on_error=True))
+        except RuntimeError as exc:
+            warnings.append(str(exc))
+
+    if "adzuna" in requested:
+        if app_id and app_key:
+            try:
+                results.extend(search_adzuna(query, location, app_id, app_key,
+                                             max_results=max_results, raise_on_error=True))
+            except RuntimeError as exc:
+                warnings.append(str(exc))
+        else:
+            warnings.append("Adzuna is not configured")
+
+    deduplicated: list[dict] = []
+    seen: set[str] = set()
+    for job in results:
+        identity = "|".join(_normalize_identity(job.get(key)) for key in ("company", "title", "location"))
+        if identity in seen:
+            continue
+        seen.add(identity)
+        deduplicated.append(job)
+    return deduplicated[:max_results], warnings
 
 
 def search_adzuna(query: str, location: str = "canada", app_id: str = "",
@@ -70,6 +144,46 @@ def search_adzuna(query: str, location: str = "canada", app_id: str = "",
         })
 
     return jobs
+
+
+def _indeed_country(location: str) -> str:
+    value = location.lower().strip()
+    if value in {"us", "usa", "united states"}:
+        return "USA"
+    if value in {"uk", "gb", "united kingdom"}:
+        return "UK"
+    if value in {"australia", "au"}:
+        return "Australia"
+    if value in {"germany", "de"}:
+        return "Germany"
+    return "Canada"
+
+
+def _clean_value(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and math.isnan(value):
+        return ""
+    return str(value).strip()
+
+
+def _clean_number(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(parsed) or math.isinf(parsed) else parsed
+
+
+def _indeed_job_key(url: str) -> str:
+    match = re.search(r"[?&]jk=([a-zA-Z0-9]+)", url)
+    return match.group(1) if match else url
+
+
+def _normalize_identity(value) -> str:
+    return re.sub(r"[^a-z0-9]+", "", _clean_value(value).lower())
 
 
 def rank_jobs(jobs: list[dict], profile: dict, client: anthropic.Anthropic,
