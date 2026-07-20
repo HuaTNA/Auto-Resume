@@ -7,7 +7,7 @@ experience bullets and projects using Claude.
 
 import json
 import anthropic
-from src.ai_config import get_anthropic_model
+from src.ai_json import request_json
 
 
 def retrieve_relevant_content(profile: dict, jd_analysis: dict, client: anthropic.Anthropic, top_k: int = 12) -> dict:
@@ -77,19 +77,9 @@ IMPORTANT:
 Return ONLY a JSON array of the selected bullet IDs, ranked by relevance (most relevant first).
 Example: ["b001", "b004", "p001", ...]"""
 
-    response = client.messages.create(
-        model=get_anthropic_model(),
-        max_tokens=500,
-        messages=[{"role": "user", "content": prompt}]
+    selected_ids = request_json(
+        client, prompt, expected_type=list, max_tokens=500, retry_tokens=800
     )
-
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-
-    selected_ids = json.loads(raw.strip())
 
     # Rebuild filtered profile with only selected bullets
     filtered = {

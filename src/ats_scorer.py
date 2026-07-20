@@ -7,7 +7,7 @@ Uses keyword matching + Claude semantic analysis.
 import json
 import re
 import anthropic
-from src.ai_config import get_anthropic_model
+from src.ai_json import request_json
 
 
 def _extract_text_from_latex(latex: str) -> str:
@@ -87,19 +87,9 @@ Evaluate and return ONLY a JSON object (no markdown, no explanation):
   "strength": "one sentence about what the resume does well for this JD"
 }}"""
 
-    response = client.messages.create(
-        model=get_anthropic_model(),
-        max_tokens=800,
-        messages=[{"role": "user", "content": prompt}]
+    semantic_result = request_json(
+        client, prompt, expected_type=dict, max_tokens=800, retry_tokens=1200
     )
-
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-
-    semantic_result = json.loads(raw.strip())
 
     return {
         "keyword_match": keyword_result,

@@ -1,6 +1,7 @@
 import os
 import unittest
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from api.auth import create_oauth_state, decode_oauth_state, get_secret_key
@@ -15,11 +16,29 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.ai_config import DEFAULT_ANTHROPIC_MODEL, get_anthropic_model
+from src.ai_json import AIResponseFormatError, request_json
 from src.job_finder import _indeed_country, _indeed_job_key, search_jobs
 from src.pdf_renderer import latex_to_blocks, render_latex_fallback
 
 
 class CoreTests(unittest.TestCase):
+    def test_structured_ai_response_retries_after_truncated_json(self):
+        responses = [
+            SimpleNamespace(content=[SimpleNamespace(text='{"job_title": "AI Eng')]),
+            SimpleNamespace(content=[SimpleNamespace(text='```json\n{"job_title": "AI Engineer"}\n```')]),
+        ]
+        client = SimpleNamespace(messages=SimpleNamespace(create=lambda **_: responses.pop(0)))
+        result = request_json(client, "Analyze", expected_type=dict, max_tokens=10, retry_tokens=20)
+        self.assertEqual(result, {"job_title": "AI Engineer"})
+        self.assertEqual(responses, [])
+
+    def test_structured_ai_response_has_safe_error_after_retry(self):
+        client = SimpleNamespace(messages=SimpleNamespace(create=lambda **_: SimpleNamespace(
+            content=[SimpleNamespace(text='{"still": "truncated')]
+        )))
+        with self.assertRaisesRegex(AIResponseFormatError, "Please retry generation"):
+            request_json(client, "Analyze", expected_type=dict, max_tokens=10)
+
     def test_indeed_normalization_and_multi_source_deduplication(self):
         self.assertEqual(_indeed_country("canada"), "Canada")
         self.assertEqual(_indeed_country("us"), "USA")
