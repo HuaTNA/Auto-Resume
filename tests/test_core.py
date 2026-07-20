@@ -4,12 +4,12 @@ from datetime import datetime
 from unittest.mock import patch
 
 from api.auth import create_oauth_state, decode_oauth_state, get_secret_key
-from api.database import Base, User, _build_db_url
+from api.database import Base, CareerApplication, CareerJob, HistoryRecord, User, _build_db_url
 from api.limits import enforce_external_api_limit
 from api.oauth import decrypt_credentials, encrypt_credentials, provider_statuses
 from api.routes.auth import _authorize_registration, _registration_mode
 from api.server import _validate_latex_safety, _wrap_cover_letter_tex
-from api.workflows.job_search import _job_qualifies
+from api.workflows.job_search import _job_qualifies, ensure_application_for_job
 from api.workflows.scheduling import next_run_at
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -143,6 +143,25 @@ class CoreTests(unittest.TestCase):
             engine.dispose()
             if previous is None: os.environ.pop("API_DAILY_UNITS_PER_USER", None)
             else: os.environ["API_DAILY_UNITS_PER_USER"] = previous
+
+    def test_user_selected_job_creates_one_idempotent_review_record(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        try:
+            user = User(email="selection@example.com", password_hash="unused")
+            session.add(user); session.flush()
+            job = CareerJob(public_id="job-selection", user_id=user.id, title="AI Engineer", company="Acme")
+            session.add(job); session.flush()
+            first = ensure_application_for_job(session, user, job)
+            second = ensure_application_for_job(session, user, job)
+            self.assertEqual(first.id, second.id)
+            self.assertEqual(session.query(CareerApplication).count(), 1)
+            self.assertEqual(session.query(HistoryRecord).count(), 1)
+            self.assertEqual(first.approval_status, "pending")
+        finally:
+            session.close()
+            engine.dispose()
 
 
 if __name__ == "__main__":

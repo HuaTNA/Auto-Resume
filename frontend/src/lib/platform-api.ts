@@ -45,6 +45,7 @@ export function listAutomations() { return request<{ automations: PlatformAutoma
 export function createAutomation(input: { name: string; kind: string; schedule?: string; max_retries?: number; config?: Record<string, unknown> }) { return request<{ automation: PlatformAutomation }>("/api/automations", { method: "POST", body: JSON.stringify(input) }); }
 export function updateAutomation(id: string, patch: { enabled?: boolean; schedule?: string }) { return request<{ automation: PlatformAutomation }>(`/api/automations/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
 export function runAutomation(id: string) { return request<{ run: AutomationRun }>(`/api/automations/${id}/runs`, { method: "POST" }); }
+export function generateJobMaterials(jobId: string) { return request<{ ok: true; application_record_id: number }>(`/api/career/jobs/${jobId}/generate-materials`, { method: "POST" }); }
 
 export interface WorkspaceNotification { id: string; kind: string; title: string; message: string; href?: string; read_at?: string; created_at: string; }
 export function listNotifications(unreadOnly = false) { return request<{ notifications: WorkspaceNotification[] }>(`/api/notifications${unreadOnly ? "?unread_only=true" : ""}`); }
