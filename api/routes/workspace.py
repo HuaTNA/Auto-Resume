@@ -46,6 +46,7 @@ from api.workflows.job_search import ensure_application_for_job, execute_automat
 from api.workflows.runner import run_due_automations
 from api.workflows.scheduling import next_run_at
 from src.ai_config import get_anthropic_model
+from src.ai_json import AIResponseFormatError
 
 
 router = APIRouter(prefix="/api", tags=["workspace"])
@@ -68,6 +69,12 @@ def _json_load(value: str | None, fallback: Any) -> Any:
 
 def _json_dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
+
+
+def _material_failure_detail(exc: Exception) -> str:
+    if isinstance(exc, AIResponseFormatError):
+        return "The AI returned an incomplete response. Please retry generation."
+    return "Material generation failed. Verify the AI configuration and retry."
 
 
 def _model_dump(value: BaseModel, *, exclude_unset: bool = False) -> dict:
@@ -497,7 +504,7 @@ def generate_suggested_materials(record_id: int, current_user: User = Depends(ge
     try:
         history = generate_application_materials(db, current_user, application)
     except Exception as exc:
-        db.rollback(); raise HTTPException(502, f"Material generation failed: {type(exc).__name__}: {exc}") from exc
+        db.rollback(); raise HTTPException(502, _material_failure_detail(exc)) from exc
     return {"ok": True, "record": history.to_dict()}
 
 
@@ -512,7 +519,7 @@ def generate_selected_job_materials(public_id: str, current_user: User = Depends
     try:
         history = generate_application_materials(db, current_user, application)
     except Exception as exc:
-        db.rollback(); raise HTTPException(502, f"Material generation failed: {type(exc).__name__}: {exc}") from exc
+        db.rollback(); raise HTTPException(502, _material_failure_detail(exc)) from exc
     return {"ok": True, "application_record_id": history.id, "record": history.to_dict()}
 
 

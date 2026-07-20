@@ -3,10 +3,9 @@ jd_parser.py
 Parses a job description using Claude API and extracts structured requirements.
 """
 
-import json
 import re
 import anthropic
-from src.ai_config import get_anthropic_model
+from src.ai_json import request_json
 
 # Sections that contain no useful info for resume tailoring
 _NOISE_PATTERNS = [
@@ -68,7 +67,7 @@ def parse_jd(jd_text: str, client: anthropic.Anthropic) -> dict:
     """
     jd_cleaned = clean_jd(jd_text)
 
-    prompt = f"""Analyze this job description with extreme attention to detail.
+    prompt = f"""Analyze this job description carefully.
 
 JOB DESCRIPTION:
 {jd_cleaned}
@@ -81,15 +80,15 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
   "company": "company name",
   "company_type": "startup | enterprise | research | agency",
   "seniority": "intern | junior | mid | senior | staff",
-  "required_skills": ["skill1", "skill2"],
-  "preferred_skills": ["skill1", "skill2"],
-  "key_responsibilities": ["responsibility1", "responsibility2"],
-  "ats_keywords": ["every technical keyword, tool, framework, methodology mentioned — be exhaustive"],
-  "focus_areas": ["area1", "area2"],
-  "soft_requirements": ["implied non-technical qualities like customer-facing, presentation skills, startup mindset, cross-functional collaboration, etc."],
-  "action_verbs": ["key verbs used in the JD like build, design, deploy, partner, lead — these reveal what they value"],
-  "deal_breakers": ["absolute must-haves that would disqualify a candidate if missing"],
-  "bonus_signals": ["nice-to-haves that would make a candidate stand out"],
+  "required_skills": ["up to 12 skills"],
+  "preferred_skills": ["up to 8 skills"],
+  "key_responsibilities": ["up to 8 concise responsibilities"],
+  "ats_keywords": ["up to 20 high-value technical keywords, tools, frameworks, and methodologies"],
+  "focus_areas": ["up to 6 areas"],
+  "soft_requirements": ["up to 6 implied non-technical qualities"],
+  "action_verbs": ["up to 8 key verbs used in the JD"],
+  "deal_breakers": ["up to 6 absolute must-haves"],
+  "bonus_signals": ["up to 6 nice-to-haves"],
   "summary": "2-3 sentence summary of the IDEAL candidate they are looking for, including both technical and soft qualities"
 }}
 
@@ -97,17 +96,13 @@ Tips for extraction:
 - "customer-facing" or "engaging with stakeholders" = soft requirement for communication
 - "prototype", "demo", "workshop" = they want someone who can BUILD and SHOW, not just talk
 - "startups" in the title/description = they value speed, adaptability, wearing multiple hats
-- Pay attention to verbs: "own" means leadership, "partner" means collaboration, "build" means hands-on"""
+- Pay attention to verbs: "own" means leadership, "partner" means collaboration, "build" means hands-on
+- Keep each list item concise and obey every list limit above"""
 
-    response = client.messages.create(
-        model=get_anthropic_model(),
-        max_tokens=1500,
-        messages=[{"role": "user", "content": prompt}]
+    return request_json(
+        client,
+        prompt,
+        expected_type=dict,
+        max_tokens=1800,
+        retry_tokens=2600,
     )
-
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    return json.loads(raw.strip())
