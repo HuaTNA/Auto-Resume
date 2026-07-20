@@ -1,6 +1,7 @@
 import os
 import unittest
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -19,9 +20,16 @@ from src.ai_config import DEFAULT_ANTHROPIC_MODEL, get_anthropic_model
 from src.ai_json import AIResponseFormatError, request_json
 from src.job_finder import _indeed_country, _indeed_job_key, search_jobs
 from src.pdf_renderer import latex_to_blocks, render_latex_fallback
+from src.templates import list_templates
 
 
 class CoreTests(unittest.TestCase):
+    def test_vercel_bundle_keeps_resume_templates(self):
+        ignore_rules = (Path(__file__).parent.parent / ".vercelignore").read_text(encoding="utf-8")
+        self.assertNotIn("data/**", ignore_rules)
+        self.assertIn("!data/template*.tex", ignore_rules)
+        self.assertTrue(all(template["exists"] for template in list_templates()))
+
     def test_structured_ai_response_retries_after_truncated_json(self):
         responses = [
             SimpleNamespace(content=[SimpleNamespace(text='{"job_title": "AI Eng')]),
