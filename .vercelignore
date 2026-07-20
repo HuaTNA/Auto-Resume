@@ -3,7 +3,9 @@
 .venv/**
 .env*
 automation/**
-data/**
+# Runtime data must never ship, but resume templates are required by the API.
+data/*
+!data/template*.tex
 deploy/**
 docs/**
 output/**
