@@ -1,9 +1,10 @@
 import os
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from api.auth import create_oauth_state, decode_oauth_state, get_secret_key
-from api.database import Base, User
+from api.database import Base, User, _build_db_url
 from api.limits import enforce_external_api_limit
 from api.oauth import decrypt_credentials, encrypt_credentials, provider_statuses
 from api.routes.auth import _authorize_registration, _registration_mode
@@ -18,6 +19,21 @@ from src.pdf_renderer import latex_to_blocks, render_latex_fallback
 
 
 class CoreTests(unittest.TestCase):
+    def test_database_parts_encode_password_and_require_ssl(self):
+        with patch.dict(os.environ, {
+            "DATABASE_URL": "",
+            "DB_HOST": "aws-0-us-east-1.pooler.supabase.com",
+            "DB_USER": "postgres.project-ref",
+            "DB_PASSWORD": "p@ss#word",
+            "DB_PORT": "6543",
+            "DB_NAME": "postgres",
+        }):
+            self.assertEqual(
+                _build_db_url(),
+                "postgresql://postgres.project-ref:p%40ss%23word@"
+                "aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require",
+            )
+
     def test_signing_secret_is_strong_and_oauth_state_is_bound(self):
         self.assertGreaterEqual(len(get_secret_key().encode()), 32)
         state = create_oauth_state(42, "notion")

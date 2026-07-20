@@ -34,11 +34,12 @@ def _build_db_url() -> str:
     db_host = os.environ.get("DB_HOST", "").strip()
     if db_host:
         from urllib.parse import quote_plus
-        db_user = os.environ.get("DB_USER", "postgres")
+        db_user = quote_plus(os.environ.get("DB_USER", "postgres"))
         db_pass = quote_plus(os.environ.get("DB_PASSWORD", ""))
         db_port = os.environ.get("DB_PORT", "5432")
-        db_name = os.environ.get("DB_NAME", "postgres")
-        return f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+        db_name = quote_plus(os.environ.get("DB_NAME", "postgres"))
+        db_sslmode = quote_plus(os.environ.get("DB_SSLMODE", "require"))
+        return f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}?sslmode={db_sslmode}"
 
     if os.environ.get("VERCEL", "").strip() == "1":
         sqlite_path = Path("/tmp/auto_resume.db")

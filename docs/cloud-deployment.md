@@ -25,9 +25,10 @@ over a persistent direct connection. Append `sslmode=require` if it is absent:
 postgresql://postgres.PROJECT_REF:PASSWORD@POOLER_HOST:6543/postgres?sslmode=require
 ```
 
-If the database password contains reserved URL characters, use the individual
-`DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_PORT`, and `DB_NAME` variables supported
-by `api/database.py` instead of manually editing the URI.
+If the database password contains reserved URL characters, leave `DATABASE_URL`
+unset and use the individual `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_PORT=6543`,
+`DB_NAME=postgres`, and `DB_SSLMODE=require` variables supported by
+`api/database.py` instead of manually editing the URI.
 
 Do not upload `data/auto_resume.db`. Cloud tables are created automatically on
 the first FastAPI startup. Existing local data requires a separate migration if
