@@ -7,6 +7,7 @@ experience bullets and projects using Claude.
 
 import json
 import anthropic
+from src.ai_config import get_anthropic_model
 
 
 def retrieve_relevant_content(profile: dict, jd_analysis: dict, client: anthropic.Anthropic, top_k: int = 12) -> dict:
@@ -77,7 +78,7 @@ Return ONLY a JSON array of the selected bullet IDs, ranked by relevance (most r
 Example: ["b001", "b004", "p001", ...]"""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=500,
         messages=[{"role": "user", "content": prompt}]
     )

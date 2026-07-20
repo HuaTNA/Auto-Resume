@@ -4,8 +4,11 @@ output/
 .env
 .venv/
 data/profile.json
+data/.jwt_secret
+data/*.db
 history/
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+deploy/cloud-run.env.yaml
 grep.exe.stackdump

@@ -8,6 +8,7 @@ import { BirchIcon } from "@/components/icons/BirchIcons";
 import { getHealth, getHistory } from "@/lib/api";
 import { useLanguage } from "@/lib/language-context";
 import { useWorkspace } from "@/lib/workspace-context";
+import { listNotifications, markNotificationRead, WorkspaceNotification } from "@/lib/platform-api";
 
 interface CareerRecord { id: number; job_title: string; company: string; status: string; timestamp: string; ats_scores: { overall: number | null } }
 function dateKey(offset = 0) { const date = new Date(); date.setDate(date.getDate() + offset); return date.toLocaleDateString("en-CA"); }
@@ -17,18 +18,20 @@ export default function CommandCenter() {
   const { text, language } = useLanguage();
   const [career, setCareer] = useState<CareerRecord[]>([]);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const today = dateKey();
 
   useEffect(() => {
     getHistory().then((result) => setCareer(result.records ?? [])).catch(() => setCareer([]));
     getHealth().then(() => setBackendOnline(true)).catch(() => setBackendOnline(false));
+    listNotifications(true).then((result) => setNotifications(result.notifications)).catch(() => setNotifications([]));
   }, []);
 
   const todayTasks = tasks.filter((task) => task.status === "todo" && (!task.due_date || task.due_date === today)).slice(0, 5);
   const upcoming = tasks.filter((task) => task.status === "todo" && task.due_date && task.due_date > today).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 4);
   const activeProjects = projects.filter((project) => project.status === "active" || project.status === "blocked").slice(0, 3);
-  const activeApplications = career.filter((record) => ["generated", "applied", "interview"].includes(record.status)).slice(0, 3);
+  const activeApplications = career.filter((record) => ["suggested", "generated", "applied", "interview"].includes(record.status)).slice(0, 3);
   const suggestions = useMemo(() => {
     const items: Array<{ title: string; detail: string; href: string }> = [];
     const overdue = tasks.filter((task) => task.status === "todo" && task.due_date && task.due_date < today).length;
@@ -44,10 +47,17 @@ export default function CommandCenter() {
   return <>
     <Header eyebrow={{ zh: "个人 AI 工作站", en: "PERSONAL AI WORKSPACE" }} title={{ zh: "指挥中心", en: "Command Center" }} subtitle={{ zh: "今天要处理的事，以及整个工作区正在发生的变化。", en: "What needs your attention today, across the whole workspace." }} action={<button onClick={() => window.dispatchEvent(new Event("hua-command-palette"))} className="secondary-button hidden sm:inline-flex"><BirchIcon name="growth-ring" size={16} />⌘K</button>} />
     <WorkspacePage>
-      <section className="relative z-10 rounded-[14px] bg-[#1E1A14] px-6 py-6 shadow-[0_2px_8px_rgba(30,26,20,0.05)] sm:px-8 sm:py-7">
-        <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-[14px]" aria-hidden="true"><BirchIcon name="branch" size={170} className="absolute -bottom-12 -right-4 hidden opacity-[0.08] brightness-[4] sm:block" /></span>
-        <div className="relative z-10 max-w-3xl"><p className="latin text-[9px] font-normal uppercase tracking-[0.34em] text-[#B8A98A]">Think · Build · Move forward</p><h1 className="latin mt-3 max-w-3xl text-2xl font-normal leading-[1.2] tracking-[0.025em] text-[#F5EFE0] sm:text-[34px]">Your personal workspace for thinking, building, and moving work forward.</h1><p className="latin mt-3 max-w-2xl text-sm leading-[1.6] text-[#B8A98A]">Bring projects, career goals, documents, knowledge, and automations into one AI-powered command center.</p>
-          <div className="mt-5 flex flex-wrap gap-2.5"><Link href="/copilot" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[#F5EFE0] bg-[#F5EFE0] px-4 text-[12px] text-[#1E1A14] transition-transform hover:-translate-y-0.5"><BirchIcon name="leaf" size={15} />{text("询问 AI 助手", "Ask Copilot")}</Link><div className="relative"><button onClick={() => setCreateOpen((open) => !open)} aria-expanded={createOpen} aria-haspopup="menu" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[rgba(245,239,224,0.25)] bg-[rgba(245,239,224,0.08)] px-4 text-[12px] text-[#F5EFE0] hover:bg-[rgba(245,239,224,0.14)]"><span aria-hidden="true">＋</span>{text("新建", "Create New")}<span aria-hidden="true">⌄</span></button>{createOpen && <div role="menu" className="absolute left-0 top-[calc(100%+8px)] z-30 w-52 rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] p-2 shadow-[0_16px_48px_rgba(30,26,20,0.16),0_4px_16px_rgba(30,26,20,0.08)]">{[{ href: "/projects?new=1", zh: "项目", en: "Project" }, { href: "/tasks?new=1", zh: "任务", en: "Task" }, { href: "/knowledge?new=1", zh: "知识内容", en: "Knowledge item" }, { href: "/generate", zh: "职业文档", en: "Career document" }].map((item) => <Link key={item.href} href={item.href} role="menuitem" onClick={() => setCreateOpen(false)} className="block rounded-[6px] px-3 py-2 text-xs hover:bg-[#FDFAF3]">{item[language]}</Link>)}</div>}</div><Link href="/tasks" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[rgba(245,239,224,0.25)] bg-[rgba(245,239,224,0.08)] px-4 text-[12px] text-[#F5EFE0] hover:bg-[rgba(245,239,224,0.14)]"><BirchIcon name="catkin" size={15} className="brightness-[4]" />{text("打开今天", "Open Today")}</Link></div>
+      <section className="relative z-10 overflow-visible rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-5 shadow-[0_2px_8px_rgba(30,26,20,0.05)] sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-xl">
+            <p className="eyebrow text-[#9A8468]">{text("今日概览", "Today at a glance")}</p>
+            <h2 className="mt-2 text-xl font-normal tracking-[0.08em] text-[#1E1A14] sm:text-2xl">{suggestions[0]?.title}</h2>
+            <p className="mt-2 text-xs leading-6 text-[#7A6A50]">{suggestions[0]?.detail}</p>
+          </div>
+          <div className="flex flex-wrap gap-2.5"><Link href="/copilot" className="primary-button"><BirchIcon name="leaf" size={15} className="brightness-[4]" />{text("询问 AI", "Ask AI")}</Link><div className="relative"><button onClick={() => setCreateOpen((open) => !open)} aria-expanded={createOpen} aria-haspopup="menu" className="secondary-button"><span aria-hidden="true">＋</span>{text("新建", "Create")}<span aria-hidden="true">⌄</span></button>{createOpen && <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-30 w-52 rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] p-2 shadow-[0_16px_48px_rgba(30,26,20,0.16),0_4px_16px_rgba(30,26,20,0.08)]">{[{ href: "/projects?new=1", zh: "项目", en: "Project" }, { href: "/tasks?new=1", zh: "任务", en: "Task" }, { href: "/knowledge?new=1", zh: "知识内容", en: "Knowledge item" }, { href: "/generate", zh: "职业文档", en: "Career document" }].map((item) => <Link key={item.href} href={item.href} role="menuitem" onClick={() => setCreateOpen(false)} className="block rounded-[6px] px-3 py-2 text-xs hover:bg-[#FDFAF3]">{item[language]}</Link>)}</div>}</div></div>
+        </div>
+        <div className="mt-5 grid grid-cols-3 border-t border-[rgba(30,26,20,0.10)] pt-4">
+          {[{ value: todayTasks.length, zh: "今日任务", en: "Today" }, { value: activeProjects.length, zh: "活跃项目", en: "Projects" }, { value: notifications.length, zh: "未读通知", en: "Unread" }].map((item, index) => <div key={item.en} className={`px-4 first:pl-0 ${index ? "border-l border-[rgba(30,26,20,0.10)]" : ""}`}><p className="latin text-xl text-[#1E1A14]">{item.value}</p><p className="mt-0.5 text-[10px] text-[#7A6A50]">{language === "zh" ? item.zh : item.en}</p></div>)}
         </div>
       </section>
 
@@ -74,6 +84,8 @@ export default function CommandCenter() {
           <Section title={text("最近活动", "Recent Activity")} eyebrow={text("跨模块变化", "Across the workspace")}>
             {activities.length === 0 ? <p className="rounded-[16px] border border-[rgba(30,26,20,0.12)] px-4 py-5 text-center text-[11px] text-[#7A6A50]">{text("创建项目、任务或知识后，活动会出现在这里。", "Changes to projects, tasks, and knowledge will appear here.")}</p> : <div className="space-y-3">{activities.slice(0, 5).map((item) => <div key={item.id} className="flex items-start gap-3"><span className="mt-1.5 size-1.5 bg-[#B8A98A]" /><div className="min-w-0"><p className="truncate text-xs">{item.title}</p><p className="latin mt-0.5 text-[9px] uppercase tracking-[0.22em] text-[#9A8468]">{item.module} · {item.action}</p></div></div>)}</div>}
           </Section>
+
+          {notifications.length > 0 && <Section title={text("通知", "Notifications")} eyebrow={`${notifications.length} ${text("条未读", "unread")}`}><div className="space-y-2">{notifications.slice(0, 5).map((item) => <Link key={item.id} href={item.href || "/automations"} onClick={() => { void markNotificationRead(item.id); setNotifications((current) => current.filter((entry) => entry.id !== item.id)); }} className="block rounded-[12px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4"><p className="text-xs font-medium">{item.title}</p><p className="mt-1 text-[10px] leading-5 text-[#7A6A50]">{item.message}</p></Link>)}</div></Section>}
 
           <div className="flex items-center gap-3 rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4"><span className={`size-2.5 ${backendOnline === null ? "bg-[#9A8468]" : backendOnline ? "bg-[#B8A98A]" : "bg-[#1E1A14]"}`} /><div className="flex-1"><p className="text-xs font-medium">{text("工作区服务", "Workspace services")}</p><p className="mt-0.5 text-[10px] text-[#7A6A50]">{backendOnline === null ? text("正在检查…", "Checking…") : backendOnline ? text("在线，自动化可连接", "Online, ready for automations") : text("离线，部分职业功能不可用", "Offline, some Career features are unavailable")}</p></div><Link href="/automations" className="text-[10px] text-[#1E1A14] underline decoration-[#B8A98A] underline-offset-4">{text("查看", "View")}</Link></div>
         </div>

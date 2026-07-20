@@ -1,24 +1,24 @@
-import WorkspaceModulePage from "@/components/WorkspaceModulePage";
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import Header from "@/components/Header";
+import { Section, StatusPill, WorkspacePage } from "@/components/workspace/WorkspaceUI";
+import { disconnectIntegration, IntegrationProvider, integrationAuthorizeUrl, listIntegrations, PlatformIntegration, syncIntegration } from "@/lib/platform-api";
+import { useLanguage } from "@/lib/language-context";
 
 export default function IntegrationsPage() {
-  return (
-    <WorkspaceModulePage
-      eyebrow="Connected workspace"
-      title="Integrations"
-      subtitle="Bring external tools into Personal OS without surrendering the source of truth."
-      icon="hub"
-      statement="Connect the tools you use while keeping your workspace in control."
-      features={[
-        { icon: "description", title: "Notion", description: "Publish selected jobs and application status outward through one-way synchronization.", status: "Planned" },
-        { icon: "alternate_email", title: "Email and calendar", description: "Turn messages, follow-ups, interviews, and reminders into workspace context.", status: "Planned" },
-        { icon: "extension", title: "Browser capture", description: "Save visible information from the web without exposing private API or database keys.", status: "Planned" },
-      ]}
-      nextSteps={[
-        "Create a secure per-user connection model",
-        "Ship one-way Notion sync as the first integration",
-        "Add email and calendar context with explicit permissions",
-        "Expose a narrow authenticated API for browser capture",
-      ]}
-    />
-  );
+  const { text } = useLanguage(); const [items, setItems] = useState<PlatformIntegration[]>([]); const [providers, setProviders] = useState<IntegrationProvider[]>([]); const [busy, setBusy] = useState(""); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
+  async function load() { try { const result = await listIntegrations(); setItems(result.integrations); setProviders(result.providers); setError(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Integrations could not be loaded"); } }
+  useEffect(() => { void load(); }, []);
+  async function disconnect(provider: IntegrationProvider) { setBusy(provider.id); try { await disconnectIntegration(provider.id); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Connection could not be updated"); } finally { setBusy(""); } }
+  async function sync(provider: IntegrationProvider) { setBusy(`sync:${provider.id}`); setNotice(""); try { const result = await syncIntegration(provider.id); setNotice(text(`已导入 ${result.imported} 项，跳过 ${result.skipped} 项重复内容。`, `Imported ${result.imported}; skipped ${result.skipped} duplicates.`)); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Integration could not be synced"); } finally { setBusy(""); } }
+  return <><Header eyebrow={{ zh: "连接工作区", en: "CONNECTED WORKSPACE" }} title={{ zh: "集成", en: "Integrations" }} subtitle={{ zh: "集中记录外部连接、权限范围与连接状态。", en: "Keep external connections, scopes, and status in one place." }} /><WorkspacePage>
+    {error && <p className="rounded-[12px] bg-[#EBE2CC] p-4 text-xs">{error}</p>}
+    {notice && <p className="rounded-[12px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-4 text-xs">{notice}</p>}
+    <Section title={text("连接注册表", "Connection registry")}>
+      <p className="mb-5 text-xs leading-6 text-[#7A6A50]">{text("Notion 与 Google Calendar 使用真实 OAuth 授权；访问令牌只以加密形式保存在服务端。", "Notion and Google Calendar use real OAuth authorization; access tokens are stored encrypted on the server.")}</p><div className="grid gap-4 md:grid-cols-3">{providers.map((provider) => { const existing = items.find((item) => item.provider === provider.id && item.state === "connected"); return <article key={provider.id} className="rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-5"><div className="flex items-center justify-between"><StatusPill tone={existing ? "brand" : provider.configured ? "neutral" : "warning"}>{existing ? text("已连接", "Connected") : provider.configured ? text("可连接", "Ready") : text("等待配置", "Setup required")}</StatusPill></div><h3 className="mt-5 text-sm font-medium">{provider.name}</h3>{existing?.external_account && <p className="mt-2 text-[10px] text-[#7A6A50]">{existing.external_account}</p>}<div className="mt-3 flex flex-wrap gap-1.5">{provider.scopes.map((scope) => <span key={scope} className="rounded-[6px] bg-[#EBE2CC] px-2 py-1 text-[9px]">{scope.split("/").pop()}</span>)}</div>{existing ? <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => void sync(provider)} disabled={busy === `sync:${provider.id}`} className="primary-button disabled:opacity-50">{busy === `sync:${provider.id}` ? text("同步中…", "Syncing…") : text("立即同步", "Sync now")}</button><button onClick={() => void disconnect(provider)} disabled={busy === provider.id} className="secondary-button disabled:opacity-50">{busy === provider.id ? text("断开中…", "Disconnecting…") : text("断开", "Disconnect")}</button></div> : provider.configured ? <a href={integrationAuthorizeUrl(provider.id)} className="primary-button mt-5">{text("授权连接", "Authorize")}</a> : <button disabled className="secondary-button mt-5 cursor-not-allowed opacity-50">{text("需要 Client ID / Secret", "Client credentials required")}</button>}</article>; })}<article className="rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-5"><StatusPill tone="neutral">{text("本地入口", "Local flow")}</StatusPill><h3 className="mt-5 text-sm font-medium">Browser Capture</h3><p className="mt-3 text-xs leading-6 text-[#7A6A50]">{text("浏览器扩展尚未提供；当前可通过知识库快速保存网页链接和摘要。", "A browser extension is not bundled yet; save page links and summaries through Knowledge.")}</p><Link href="/knowledge?new=1" className="secondary-button mt-5">{text("保存网页内容", "Save web content")}</Link></article></div>
+    </Section>
+    <p className="rounded-[12px] bg-[#EBE2CC] p-4 text-xs leading-6 text-[#7A6A50]">{text("敏感访问令牌不会通过这个界面写入数据库；正式 OAuth 接入时应只保存加密凭证引用。", "Sensitive access tokens are not written through this interface; live OAuth should store only encrypted credential references.")}</p>
+  </WorkspacePage></>;
 }

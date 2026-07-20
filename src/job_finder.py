@@ -9,13 +9,15 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import anthropic
+from src.ai_config import get_anthropic_model
 
 
 ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
 
 
 def search_adzuna(query: str, location: str = "canada", app_id: str = "",
-                  app_key: str = "", max_results: int = 20, page: int = 1) -> list[dict]:
+                  app_key: str = "", max_results: int = 20, page: int = 1,
+                  raise_on_error: bool = False) -> list[dict]:
     """
     Search Adzuna job listings. Returns list of job dicts.
     Get free API keys at https://developer.adzuna.com/
@@ -48,11 +50,14 @@ def search_adzuna(query: str, location: str = "canada", app_id: str = "",
             data = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as e:
         print(f"  Adzuna API error: {e}")
+        if raise_on_error:
+            raise RuntimeError(f"Adzuna API error: {e}") from e
         return []
 
     jobs = []
     for item in data.get("results", []):
         jobs.append({
+            "external_id": str(item.get("id", "")),
             "title": item.get("title", ""),
             "company": item.get("company", {}).get("display_name", "Unknown"),
             "location": item.get("location", {}).get("display_name", ""),
@@ -124,7 +129,7 @@ Scoring criteria:
 - Role type fit (engineering vs management vs research)"""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
     )

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Hua Browser Capture",
+  "version": "1.0.0",
+  "description": "Capture the current page or selected text into the Hua knowledge library.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_title": "Save to Hua",
+    "default_popup": "popup.html"
+  }
+}

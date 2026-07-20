@@ -1,0 +1,11 @@
+.git/**
+.github/**
+.venv/**
+.env*
+automation/**
+data/**
+deploy/**
+docs/**
+frontend/**
+output/**
+tests/**

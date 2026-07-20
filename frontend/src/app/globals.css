@@ -215,7 +215,7 @@ textarea::placeholder {
   position: absolute;
   bottom: -1px;
   left: 0;
-  width: 3.5rem;
+  width: 2.5rem;
   height: 1px;
   background: var(--color-gold-mute);
   content: "";
@@ -231,7 +231,7 @@ textarea::placeholder {
   right: 3rem;
   left: 3rem;
   height: 1px;
-  background: rgba(184, 169, 138, 0.22);
+  background: rgba(184, 169, 138, 0.16);
   content: "";
   pointer-events: none;
 }

@@ -1,8 +1,4 @@
-function getApiBase() {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window !== "undefined") return `${window.location.protocol}//${window.location.hostname}:8000`;
-  return "http://127.0.0.1:8000";
-}
+import { getApiBase } from "./api-base";
 
 async function fetchAPI(path: string, options?: RequestInit) {
   const res = await fetch(`${getApiBase()}${path}`, {
@@ -32,28 +28,44 @@ export async function getProfile() {
   return fetchAPI("/api/profile");
 }
 
-export async function updateProfile(profile: Record<string, any>) {
+export async function getProfileCompleteness() {
+  return fetchAPI("/api/profile/completeness");
+}
+
+export async function createGenerationJob(jdText: string, template: string, generateCoverLetter: boolean, idempotencyKey: string) {
+  return fetchAPI("/api/generation-jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({ jd_text: jdText, template, top_k: 12, generate_cover_letter: generateCoverLetter }),
+  });
+}
+
+export async function getGenerationJob(jobId: string) {
+  return fetchAPI(`/api/generation-jobs/${jobId}`);
+}
+
+export async function updateProfile(profile: object) {
   return fetchAPI("/api/profile", {
     method: "PUT",
     body: JSON.stringify(profile),
   });
 }
 
-export async function updatePersonal(personal: Record<string, any>) {
+export async function updatePersonal(personal: object) {
   return fetchAPI("/api/profile/personal", {
     method: "PUT",
     body: JSON.stringify(personal),
   });
 }
 
-export async function updateSkills(skills: Record<string, any>) {
+export async function updateSkills(skills: object) {
   return fetchAPI("/api/profile/skills", {
     method: "PUT",
     body: JSON.stringify(skills),
   });
 }
 
-export async function addExperience(data: Record<string, any>) {
+export async function addExperience(data: object) {
   return fetchAPI("/api/profile/experience", {
     method: "POST",
     body: JSON.stringify(data),
@@ -64,7 +76,7 @@ export async function deleteExperience(expId: string) {
   return fetchAPI(`/api/profile/experience/${expId}`, { method: "DELETE" });
 }
 
-export async function addProject(data: Record<string, any>) {
+export async function addProject(data: object) {
   return fetchAPI("/api/profile/project", {
     method: "POST",
     body: JSON.stringify(data),
@@ -86,7 +98,7 @@ export async function parseJD(jdText: string) {
   });
 }
 
-export async function retrieveBullets(jdAnalysis: Record<string, any>, topK = 12) {
+export async function retrieveBullets(jdAnalysis: object, topK = 12) {
   return fetchAPI("/api/retrieve-bullets", {
     method: "POST",
     body: JSON.stringify({ jd_analysis: jdAnalysis, top_k: topK }),
@@ -94,8 +106,8 @@ export async function retrieveBullets(jdAnalysis: Record<string, any>, topK = 12
 }
 
 export async function generateResume(
-  filteredProfile: Record<string, any>,
-  jdAnalysis: Record<string, any>,
+  filteredProfile: object,
+  jdAnalysis: object,
   template = "classic",
   generateCoverLetter = true
 ) {
@@ -112,7 +124,7 @@ export async function generateResume(
 
 export async function scoreResume(
   resumeTex: string,
-  jdAnalysis: Record<string, any>
+  jdAnalysis: object
 ) {
   return fetchAPI("/api/score", {
     method: "POST",
@@ -122,9 +134,9 @@ export async function scoreResume(
 
 export async function refineResume(
   resumeTex: string,
-  atsFeedback: Record<string, any>,
-  jdAnalysis: Record<string, any>,
-  filteredProfile: Record<string, any>
+  atsFeedback: object,
+  jdAnalysis: object,
+  filteredProfile: object
 ) {
   return fetchAPI("/api/refine", {
     method: "POST",
@@ -159,8 +171,8 @@ export async function getHistory() {
 }
 
 export async function saveHistory(
-  jdAnalysis: Record<string, any>,
-  atsScores: Record<string, any>,
+  jdAnalysis: object,
+  atsScores: object,
   template: string,
   resumeTex: string,
   coverLetter: string
@@ -188,17 +200,17 @@ export async function getHistoryRecord(recordId: number) {
   return fetchAPI(`/api/history/${recordId}`);
 }
 
-export async function compilePdf(resumeTex: string) {
+export async function compilePdf(recordId: number) {
   return fetchAPI("/api/compile-pdf", {
     method: "POST",
-    body: JSON.stringify({ resume_tex: resumeTex }),
+    body: JSON.stringify({ record_id: recordId }),
   });
 }
 
-export async function compileCoverLetterPdf(coverLetter: string) {
+export async function compileCoverLetterPdf(recordId: number) {
   return fetchAPI("/api/compile-cover-letter-pdf", {
     method: "POST",
-    body: JSON.stringify({ cover_letter: coverLetter }),
+    body: JSON.stringify({ record_id: recordId }),
   });
 }
 
@@ -207,6 +219,14 @@ export async function updateHistoryStatus(recordId: number, status: string) {
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
+}
+
+export async function generateSuggestedMaterials(recordId: number) {
+  return fetchAPI(`/api/career/history/${recordId}/generate-materials`, { method: "POST" });
+}
+
+export async function approveApplication(recordId: number) {
+  return fetchAPI(`/api/career/history/${recordId}/approve`, { method: "POST" });
 }
 
 export async function searchJobs(

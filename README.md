@@ -4,6 +4,8 @@ An extensible personal command center for projects, tasks, knowledge, documents,
 
 The new product information architecture, shared data contracts, and staged Supabase migration are documented in [`docs/personal-ai-workspace-architecture.md`](docs/personal-ai-workspace-architecture.md).
 
+Cloud deployment instructions are in [`docs/cloud-deployment.md`](docs/cloud-deployment.md).
+
 ## Features
 
 - **Smart JD Parsing** — Extracts skills, keywords, responsibilities, soft requirements, deal-breakers from any job description. Includes noise cleaning to remove benefits/legal/salary sections and save API tokens.
@@ -165,6 +167,9 @@ output/
 | POST   | `/api/score`                    | ATS score a resume             |
 | POST   | `/api/refine`                   | Refine resume with ATS feedback|
 | POST   | `/api/generate-full`            | Full pipeline in one call      |
+| POST   | `/api/generation-jobs`           | Queue an idempotent generation |
+| GET    | `/api/generation-jobs/{id}`      | Poll generation status/result  |
+| GET    | `/api/profile/completeness`      | Validate profile readiness     |
 | GET    | `/api/history`                  | List history (light)           |
 | GET    | `/api/history/{id}`             | Get record with full content   |
 | PATCH  | `/api/history/{id}`             | Update status                  |
@@ -231,6 +236,8 @@ start.bat                   # One-click launcher (Windows)
 
 ## Roadmap
 
+Scheduled career discovery, deduplication, review items, material generation, retries, notifications, and hosted worker setup are documented in [Career automation workflow](docs/automation-workflow.md).
+
 - [x] CLI prototype with Claude API pipeline
 - [x] LaTeX output with custom templates
 - [x] ATS scoring with iterative optimization
@@ -244,4 +251,4 @@ start.bat                   # One-click launcher (Windows)
 - [ ] Vertex AI embeddings for better retrieval
 - [ ] LinkedIn profile import
 - [ ] Batch resume generation
-- [ ] Deploy to Vercel + Railway
+- [ ] Deploy frontend and FastAPI to Vercel with Supabase PostgreSQL

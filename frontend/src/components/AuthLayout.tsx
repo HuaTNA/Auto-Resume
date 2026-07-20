@@ -1,52 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode } from "react";
 import { useLanguage } from "@/lib/language-context";
 
 export default function AuthLayout({ children, mode }: { children: ReactNode; mode: "login" | "register" }) {
   const { text } = useLanguage();
-  const [splashVisible, setSplashVisible] = useState(false);
-  const [splashLeaving, setSplashLeaving] = useState(false);
-  const [entered, setEntered] = useState(mode === "register");
-  const [cardVisible, setCardVisible] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSplashVisible(true), 80);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!entered) return;
-    const timer = window.setTimeout(() => setCardVisible(true), 60);
-    return () => window.clearTimeout(timer);
-  }, [entered]);
-
-  function enterLogin() {
-    setSplashLeaving(true);
-    window.setTimeout(() => setEntered(true), 600);
-  }
-
-  if (!entered) {
-    return (
-      <button
-        type="button"
-        onClick={enterLogin}
-        aria-label={text("进入桦工作区登录", "Continue to sign in")}
-        className={`fixed inset-0 flex cursor-pointer items-center justify-center border-0 bg-[#E8E1D0] p-0 transition-opacity duration-[600ms] ease-out ${splashLeaving ? "opacity-0" : splashVisible ? "opacity-100" : "opacity-0"}`}
-      >
-        <span className="flex items-center gap-6 transition-transform duration-[1000ms] ease-out" style={{ transform: `scale(${splashLeaving ? 0.97 : splashVisible ? 1 : 0.96})` }}>
-          <span className="h-px w-20 bg-[rgba(30,26,20,0.25)]" />
-          <span className="latin text-[1.1rem] tracking-[0.2em] text-[#1E1A14]">桦</span>
-          <span className="h-px w-20 bg-[rgba(30,26,20,0.25)]" />
-        </span>
-      </button>
-    );
-  }
-
   return (
-    <div className="auth-canvas flex min-h-screen items-center justify-center bg-[#E8E1D0] px-5 py-10">
-      <main className={`auth-panel w-full max-w-[380px] rounded-[16px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] px-8 py-10 shadow-[0_8px_48px_rgba(30,26,20,0.09)] transition-all duration-[800ms] ease-out sm:px-11 sm:py-12 ${cardVisible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"}`}>
+    <div className="auth-canvas grid min-h-screen bg-[#E8E1D0] lg:grid-cols-[minmax(320px,0.9fr)_minmax(460px,1.1fr)]">
+      <section className="relative hidden overflow-hidden border-r border-[rgba(30,26,20,0.10)] bg-[#EDE7D3] p-12 lg:flex lg:flex-col lg:justify-between">
+        <Link href="/" className="flex items-center gap-3">
+          <span className="latin flex size-10 items-center justify-center rounded-[6px] bg-[#1E1A14] text-xl text-[#F5EFE0]">桦</span>
+          <span className="latin text-[10px] uppercase tracking-[0.36em] text-[#7A6A50]">Hua Workspace</span>
+        </Link>
+        <div className="relative z-10 max-w-md">
+          <p className="eyebrow text-[#9A8468]">Personal system</p>
+          <h1 className="mt-4 text-[2.25rem] font-normal leading-[1.35] tracking-[0.08em] text-[#1E1A14]">
+            {text("把项目、职业与知识，安放在同一个工作空间。", "A quieter place for projects, career, and knowledge.")}
+          </h1>
+          <p className="mt-5 max-w-sm text-sm leading-7 text-[#7A6A50]">
+            {text("少一些切换，多一些清晰的下一步。", "Less switching. More clarity about what comes next.")}
+          </p>
+        </div>
+        <p className="latin text-[9px] uppercase tracking-[0.32em] text-[#9A8468]">Think · Organize · Move</p>
+      </section>
+
+      <div className="flex items-center justify-center px-5 py-10 sm:px-10">
+      <main className="auth-panel w-full max-w-[390px] rounded-[16px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] px-8 py-9 sm:px-11 sm:py-11">
         <div className="mb-8 text-center">
           <Link href="/" className="latin block text-[2.6rem] font-light leading-none tracking-[0.1em] text-[#1E1A14]">桦</Link>
           <p className="latin mt-2 text-[9px] uppercase tracking-[0.45em] text-[#9A8468]">Personal AI Workspace</p>
@@ -67,6 +47,7 @@ export default function AuthLayout({ children, mode }: { children: ReactNode; mo
           </Link>
         </p>
       </main>
+      </div>
     </div>
   );
 }

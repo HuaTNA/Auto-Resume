@@ -58,7 +58,7 @@ The current frontend separates four concerns:
 - `workspace-context.tsx` is a replaceable data adapter used by Projects, Tasks, Knowledge, Home, and AI context summaries.
 - `components/workspace/` contains reusable page, section, state, status, and create-panel primitives.
 
-The initial adapter persists Projects, Tasks, Knowledge, and Activity per authenticated user in browser storage. This makes the new foundation usable immediately while keeping Supabase migration isolated to one adapter. Career continues to use the existing FastAPI database and generation APIs.
+The adapter now persists Projects, Tasks, Knowledge, and Activity per authenticated user through FastAPI. Legacy per-user browser data is imported once through an idempotent endpoint. Career keeps its compatibility APIs while normalized jobs, applications, documents, and document versions are populated alongside legacy history records.
 
 Every cross-workspace entity currently includes:
 
@@ -142,10 +142,10 @@ No existing generation, ATS, cover letter, history, profile, search, compile, or
 - Add route-level error boundaries, skeletons, and accessible announcements.
 - Add module permission keys even while every module remains enabled.
 
-### 2. Move the workspace adapter to Supabase
+### 2. Move the workspace adapter to server storage — complete on FastAPI
 
-- Create `projects`, `tasks`, `knowledge_items`, and `activities` with RLS.
-- Replace local adapter methods with a Supabase repository implementing the same interface.
+- Created `projects`, `tasks`, `knowledge_items`, and `activities` with enforced user scoping.
+- Replaced local adapter methods with a FastAPI repository implementing the same interface.
 - Import per-user browser data once, verify counts, then mark local storage migrated.
 - Use Supabase Realtime only for surfaces that materially benefit from it.
 

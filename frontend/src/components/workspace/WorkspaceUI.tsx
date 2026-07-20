@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BirchIcon, type BirchIconName } from "@/components/icons/BirchIcons";
 
 export function WorkspacePage({ children }: { children: ReactNode }) {
-  return <div className="workspace-page mx-auto w-full max-w-[1000px] space-y-7 px-5 py-7 sm:px-8 lg:px-12 lg:pb-10 lg:pt-8">{children}</div>;
+  return <div className="workspace-page mx-auto w-full max-w-[1080px] space-y-6 px-5 py-6 sm:px-8 lg:px-12 lg:pb-10 lg:pt-7">{children}</div>;
 }
 
 export function Section({ title, eyebrow, action, children, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; children: ReactNode; className?: string }) {

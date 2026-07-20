@@ -6,6 +6,7 @@ Parses a job description using Claude API and extracts structured requirements.
 import json
 import re
 import anthropic
+from src.ai_config import get_anthropic_model
 
 # Sections that contain no useful info for resume tailoring
 _NOISE_PATTERNS = [
@@ -99,7 +100,7 @@ Tips for extraction:
 - Pay attention to verbs: "own" means leadership, "partner" means collaboration, "build" means hands-on"""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=get_anthropic_model(),
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
     )
