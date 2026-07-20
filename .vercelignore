@@ -6,6 +6,5 @@ automation/**
 data/**
 deploy/**
 docs/**
-frontend/**
 output/**
 tests/**
