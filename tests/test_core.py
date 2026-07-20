@@ -137,6 +137,9 @@ class CoreTests(unittest.TestCase):
     def test_latex_safety_rejects_file_access(self):
         with self.assertRaises(HTTPException):
             _validate_latex_safety(r"\input{/etc/passwd}")
+        with self.assertRaises(HTTPException):
+            _validate_latex_safety(r"\input{glyphtounicode}\input{/etc/passwd}")
+        _validate_latex_safety(r"\input{glyphtounicode}")
         _validate_latex_safety(r"\documentclass{article}\begin{document}Safe\end{document}")
 
     def test_cover_letter_escaping_does_not_reescape_inserted_commands(self):

@@ -1058,12 +1058,16 @@ _UNSAFE_LATEX = re.compile(
     r"immediate|catcode|newread|newwrite|everyjob|loop|repeat)\b",
     re.IGNORECASE,
 )
+_SAFE_GLYPH_INPUT = re.compile(r"\\input\{glyphtounicode\}")
 
 
 def _validate_latex_safety(tex_content: str) -> None:
     if len(tex_content.encode("utf-8")) > 500_000:
         raise HTTPException(status_code=413, detail="LaTeX document is too large")
-    match = _UNSAFE_LATEX.search(tex_content)
+    # Generated templates use TeX's bundled glyph map for searchable ATS text.
+    # Remove only this exact trusted command before checking all other file I/O.
+    content_to_check = _SAFE_GLYPH_INPUT.sub("", tex_content)
+    match = _UNSAFE_LATEX.search(content_to_check)
     if match:
         raise HTTPException(status_code=400, detail=f"Unsafe LaTeX command is not allowed: {match.group(0)}")
 
