@@ -9,8 +9,10 @@ import {
   updatePersonal,
   updateSkills,
   addExperience,
+  updateExperience,
   deleteExperience,
   addProject,
+  updateProject,
   deleteProject,
   importProfileFromFile,
 } from "@/lib/api";
@@ -66,6 +68,10 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState("");
   const [activeTab, setActiveTab] = useState<"personal" | "skills" | "experience" | "projects">("personal");
   const [importing, setImporting] = useState(false);
+  const [editingExperienceId, setEditingExperienceId] = useState<string | null>(null);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [newExperienceIds, setNewExperienceIds] = useState<string[]>([]);
+  const [newProjectIds, setNewProjectIds] = useState<string[]>([]);
   const { text } = useLanguage();
 
   useEffect(() => {
@@ -138,7 +144,7 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleAddExperience() {
+  function handleAddExperience() {
     const newExp: Experience = {
       id: `exp_${Date.now()}`,
       company: "New Company",
@@ -148,15 +154,35 @@ export default function ProfilePage() {
       location: "",
       bullets: [],
     };
+    setExperiences([...experiences, newExp]);
+    setNewExperienceIds((ids) => [...ids, newExp.id]);
+    setEditingExperienceId(newExp.id);
+  }
+
+  async function handleSaveExperience(exp: Experience) {
+    setSaving(`experience-${exp.id}`);
     try {
-      await addExperience(newExp);
-      setExperiences([...experiences, newExp]);
+      if (newExperienceIds.includes(exp.id)) {
+        await addExperience(exp);
+        setNewExperienceIds((ids) => ids.filter((id) => id !== exp.id));
+      } else {
+        await updateExperience(exp.id, exp);
+      }
+      setEditingExperienceId(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to add");
+      alert(e instanceof Error ? e.message : "Failed to save experience");
+    } finally {
+      setSaving("");
     }
   }
 
   async function handleDeleteExperience(expId: string) {
+    if (newExperienceIds.includes(expId)) {
+      setExperiences(experiences.filter((e) => e.id !== expId));
+      setNewExperienceIds((ids) => ids.filter((id) => id !== expId));
+      setEditingExperienceId(null);
+      return;
+    }
     if (!confirm("Delete this experience?")) return;
     try {
       await deleteExperience(expId);
@@ -166,7 +192,17 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleAddProject() {
+  function handleCancelExperience(expId: string) {
+    setEditingExperienceId(null);
+    if (newExperienceIds.includes(expId)) {
+      setExperiences((items) => items.filter((item) => item.id !== expId));
+      setNewExperienceIds((ids) => ids.filter((id) => id !== expId));
+    } else {
+      void loadProfile();
+    }
+  }
+
+  function handleAddProject() {
     const newProj: Project = {
       id: `proj_${Date.now()}`,
       name: "New Project",
@@ -176,21 +212,51 @@ export default function ProfilePage() {
       location: "",
       bullets: [],
     };
+    setProjects([...projects, newProj]);
+    setNewProjectIds((ids) => [...ids, newProj.id]);
+    setEditingProjectId(newProj.id);
+  }
+
+  async function handleSaveProject(project: Project) {
+    setSaving(`project-${project.id}`);
     try {
-      await addProject(newProj);
-      setProjects([...projects, newProj]);
+      if (newProjectIds.includes(project.id)) {
+        await addProject(project);
+        setNewProjectIds((ids) => ids.filter((id) => id !== project.id));
+      } else {
+        await updateProject(project.id, project);
+      }
+      setEditingProjectId(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to add");
+      alert(e instanceof Error ? e.message : "Failed to save project");
+    } finally {
+      setSaving("");
     }
   }
 
   async function handleDeleteProject(projId: string) {
+    if (newProjectIds.includes(projId)) {
+      setProjects(projects.filter((p) => p.id !== projId));
+      setNewProjectIds((ids) => ids.filter((id) => id !== projId));
+      setEditingProjectId(null);
+      return;
+    }
     if (!confirm("Delete this project?")) return;
     try {
       await deleteProject(projId);
       setProjects(projects.filter((p) => p.id !== projId));
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to delete");
+    }
+  }
+
+  function handleCancelProject(projId: string) {
+    setEditingProjectId(null);
+    if (newProjectIds.includes(projId)) {
+      setProjects((items) => items.filter((item) => item.id !== projId));
+      setNewProjectIds((ids) => ids.filter((id) => id !== projId));
+    } else {
+      void loadProfile();
     }
   }
 
@@ -367,34 +433,37 @@ export default function ProfilePage() {
                       <p className="text-xs text-[#9A8468] mt-1">Stack: {exp.stack}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleDeleteExperience(exp.id)}
-                    className="text-[#9A8468] hover:text-[#1E1A14] transition-colors"
-                    title="Delete experience"
-                  >
-                    <span aria-hidden="true">删</span>
-                  </button>
+                  <div className="flex gap-3 text-sm">
+                    <button onClick={() => setEditingExperienceId(exp.id)} className="text-[#7A6A50] hover:text-[#1E1A14] hover:underline">
+                      {text("编辑", "Edit")}
+                    </button>
+                    <button onClick={() => handleDeleteExperience(exp.id)} className="text-[#9A8468] hover:text-[#1E1A14]" title="Delete experience">
+                      {text("删除", "Delete")}
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {exp.bullets.map((bullet) => (
-                    <div key={bullet.id} className="flex items-start gap-2 text-sm">
-                      <span className="text-[#1E1A14] mt-1">&#8226;</span>
-                      <div className="flex-1">
-                        <p className="text-[#7A6A50]">{bullet.text}</p>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {bullet.tags.map((tag) => (
-                            <span key={tag} className="text-[10px] bg-[#EBE2CC] text-[#9A8468] px-1.5 py-0.5 rounded">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
+                {editingExperienceId === exp.id ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Field label={text("公司", "Company")} value={exp.company} onChange={(company) => setExperiences((items) => items.map((item) => item.id === exp.id ? { ...item, company } : item))} />
+                      <Field label={text("职位", "Role")} value={exp.role} onChange={(role) => setExperiences((items) => items.map((item) => item.id === exp.id ? { ...item, role } : item))} />
+                      <Field label={text("日期", "Date")} value={exp.date} onChange={(date) => setExperiences((items) => items.map((item) => item.id === exp.id ? { ...item, date } : item))} />
+                      <Field label={text("地点", "Location")} value={exp.location} onChange={(location) => setExperiences((items) => items.map((item) => item.id === exp.id ? { ...item, location } : item))} />
+                      <div className="md:col-span-2">
+                        <Field label={text("技术栈", "Tech stack")} value={exp.stack} onChange={(stack) => setExperiences((items) => items.map((item) => item.id === exp.id ? { ...item, stack } : item))} />
                       </div>
                     </div>
-                  ))}
-                  {exp.bullets.length === 0 && (
-                    <p className="text-sm text-[#9A8468] italic">No bullets yet. Edit profile.json to add.</p>
-                  )}
-                </div>
+                    <BulletEditor bullets={exp.bullets} onChange={(bullets) => setExperiences((items) => items.map((item) => item.id === exp.id ? { ...item, bullets } : item))} />
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => handleCancelExperience(exp.id)} className="px-4 py-2 text-sm text-[#7A6A50] hover:underline">{text("取消", "Cancel")}</button>
+                      <button onClick={() => handleSaveExperience(exp)} disabled={saving === `experience-${exp.id}`} className="rounded-lg bg-[#1E1A14] px-5 py-2 text-sm text-[#F5EFE0] disabled:opacity-50">
+                        {saving === `experience-${exp.id}` ? text("保存中…", "Saving…") : text("保存经历", "Save experience")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <BulletList bullets={exp.bullets} />
+                )}
               </div>
             ))}
 
@@ -423,34 +492,37 @@ export default function ProfilePage() {
                       <p className="text-xs text-[#9A8468] mt-1">Stack: {proj.stack}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleDeleteProject(proj.id)}
-                    className="text-[#9A8468] hover:text-[#1E1A14] transition-colors"
-                    title="Delete project"
-                  >
-                    <span aria-hidden="true">删</span>
-                  </button>
+                  <div className="flex gap-3 text-sm">
+                    <button onClick={() => setEditingProjectId(proj.id)} className="text-[#7A6A50] hover:text-[#1E1A14] hover:underline">
+                      {text("编辑", "Edit")}
+                    </button>
+                    <button onClick={() => handleDeleteProject(proj.id)} className="text-[#9A8468] hover:text-[#1E1A14]" title="Delete project">
+                      {text("删除", "Delete")}
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {proj.bullets.map((bullet) => (
-                    <div key={bullet.id} className="flex items-start gap-2 text-sm">
-                      <span className="text-[#1E1A14] mt-1">&#8226;</span>
-                      <div className="flex-1">
-                        <p className="text-[#7A6A50]">{bullet.text}</p>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {bullet.tags.map((tag) => (
-                            <span key={tag} className="text-[10px] bg-[#EBE2CC] text-[#9A8468] px-1.5 py-0.5 rounded">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
+                {editingProjectId === proj.id ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Field label={text("项目名称", "Project name")} value={proj.name} onChange={(name) => setProjects((items) => items.map((item) => item.id === proj.id ? { ...item, name } : item))} />
+                      <Field label={text("角色", "Role")} value={proj.role} onChange={(role) => setProjects((items) => items.map((item) => item.id === proj.id ? { ...item, role } : item))} />
+                      <Field label={text("日期", "Date")} value={proj.date} onChange={(date) => setProjects((items) => items.map((item) => item.id === proj.id ? { ...item, date } : item))} />
+                      <Field label={text("地点", "Location")} value={proj.location} onChange={(location) => setProjects((items) => items.map((item) => item.id === proj.id ? { ...item, location } : item))} />
+                      <div className="md:col-span-2">
+                        <Field label={text("技术栈", "Tech stack")} value={proj.stack} onChange={(stack) => setProjects((items) => items.map((item) => item.id === proj.id ? { ...item, stack } : item))} />
                       </div>
                     </div>
-                  ))}
-                  {proj.bullets.length === 0 && (
-                    <p className="text-sm text-[#9A8468] italic">No bullets yet. Edit profile.json to add.</p>
-                  )}
-                </div>
+                    <BulletEditor bullets={proj.bullets} onChange={(bullets) => setProjects((items) => items.map((item) => item.id === proj.id ? { ...item, bullets } : item))} />
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => handleCancelProject(proj.id)} className="px-4 py-2 text-sm text-[#7A6A50] hover:underline">{text("取消", "Cancel")}</button>
+                      <button onClick={() => handleSaveProject(proj)} disabled={saving === `project-${proj.id}`} className="rounded-lg bg-[#1E1A14] px-5 py-2 text-sm text-[#F5EFE0] disabled:opacity-50">
+                        {saving === `project-${proj.id}` ? text("保存中…", "Saving…") : text("保存项目", "Save project")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <BulletList bullets={proj.bullets} />
+                )}
               </div>
             ))}
 
@@ -465,6 +537,69 @@ export default function ProfilePage() {
         )}
       </div>
     </>
+  );
+}
+
+function BulletList({ bullets }: { bullets: Bullet[] }) {
+  if (bullets.length === 0) {
+    return <p className="text-sm italic text-[#9A8468]">No bullets yet. Select Edit to add one.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {bullets.map((bullet) => (
+        <div key={bullet.id} className="flex items-start gap-2 text-sm">
+          <span className="mt-1 text-[#1E1A14]">&#8226;</span>
+          <div className="flex-1">
+            <p className="text-[#7A6A50]">{bullet.text}</p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {bullet.tags.map((tag) => (
+                <span key={tag} className="rounded bg-[#EBE2CC] px-1.5 py-0.5 text-[10px] text-[#9A8468]">{tag}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BulletEditor({ bullets, onChange }: { bullets: Bullet[]; onChange: (bullets: Bullet[]) => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium text-[#7A6A50]">Resume bullets</h4>
+        <button
+          type="button"
+          onClick={() => onChange([...bullets, { id: `bullet_${Date.now()}`, text: "", tags: [] }])}
+          className="text-sm text-[#1E1A14] hover:underline"
+        >
+          ＋ Add bullet
+        </button>
+      </div>
+      {bullets.map((bullet) => (
+        <div key={bullet.id} className="rounded-lg border border-[rgba(30,26,20,0.12)] bg-[#FDFAF3] p-3">
+          <textarea
+            value={bullet.text}
+            onChange={(event) => onChange(bullets.map((item) => item.id === bullet.id ? { ...item, text: event.target.value } : item))}
+            rows={3}
+            placeholder="Describe the action, technical approach, and measurable result"
+            className="w-full resize-y rounded-lg border border-[rgba(30,26,20,0.12)] px-3 py-2 text-sm focus:ring-0"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              value={bullet.tags.join(", ")}
+              onChange={(event) => onChange(bullets.map((item) => item.id === bullet.id ? { ...item, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) } : item))}
+              placeholder="Tags separated by commas"
+              className="min-w-0 flex-1 rounded-lg border border-[rgba(30,26,20,0.12)] px-3 py-2 text-sm focus:ring-0"
+            />
+            <button type="button" onClick={() => onChange(bullets.filter((item) => item.id !== bullet.id))} className="px-2 text-sm text-[#9A8468] hover:text-[#1E1A14]">
+              Delete
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

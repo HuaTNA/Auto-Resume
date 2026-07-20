@@ -72,6 +72,13 @@ export async function addExperience(data: object) {
   });
 }
 
+export async function updateExperience(expId: string, data: object) {
+  return fetchAPI(`/api/profile/experience/${expId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function deleteExperience(expId: string) {
   return fetchAPI(`/api/profile/experience/${expId}`, { method: "DELETE" });
 }
@@ -79,6 +86,13 @@ export async function deleteExperience(expId: string) {
 export async function addProject(data: object) {
   return fetchAPI("/api/profile/project", {
     method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateProject(projId: string, data: object) {
+  return fetchAPI(`/api/profile/project/${projId}`, {
+    method: "PUT",
     body: JSON.stringify(data),
   });
 }
