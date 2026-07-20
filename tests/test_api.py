@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from api.database import Base, HistoryRecord, get_db
+from api.database import Base, CareerApplication, CareerJob, HistoryRecord, get_db
 from api.server import app
 
 
@@ -107,6 +107,31 @@ class ApiIntegrationTests(unittest.TestCase):
             session.close()
         response = self.client_a.post("/api/compile-pdf", json={"record_id": record_id})
         self.assertEqual(response.status_code, 404)
+
+    def test_history_keeps_job_match_separate_from_resume_ats(self):
+        session = self.Session()
+        try:
+            user_id = self._user_id("a@example.com")
+            job = CareerJob(public_id="job-score", user_id=user_id, title="AI Engineer", company="Acme")
+            session.add(job); session.flush()
+            record = HistoryRecord(
+                user_id=user_id, timestamp=datetime.utcnow().isoformat(), job_title=job.title,
+                company=job.company, required_skills="[]", ats_scores='{"overall": 72}',
+                output_files="[]", resume_tex="generated resume", status="generated",
+            )
+            session.add(record); session.flush()
+            session.add(CareerApplication(
+                public_id="application-score", user_id=user_id, job_id=job.id,
+                history_record_id=record.id, status="generated", match_score=80,
+            ))
+            session.commit()
+        finally:
+            session.close()
+
+        payload = self.client_a.get("/api/history").json()
+        self.assertEqual(payload["records"][0]["match_score"], 80)
+        self.assertEqual(payload["records"][0]["ats_scores"]["overall"], 72)
+        self.assertEqual(payload["stats"]["avg_score"], 72)
 
     def test_career_document_version_updates_download_source(self):
         session = self.Session()
