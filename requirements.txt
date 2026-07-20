@@ -8,3 +8,4 @@ sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
 reportlab>=4.2.0
 cryptography>=43.0.0
+python-jobspy>=1.1.82

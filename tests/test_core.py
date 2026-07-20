@@ -15,10 +15,22 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.ai_config import DEFAULT_ANTHROPIC_MODEL, get_anthropic_model
+from src.job_finder import _indeed_country, _indeed_job_key, search_jobs
 from src.pdf_renderer import latex_to_blocks, render_latex_fallback
 
 
 class CoreTests(unittest.TestCase):
+    def test_indeed_normalization_and_multi_source_deduplication(self):
+        self.assertEqual(_indeed_country("canada"), "Canada")
+        self.assertEqual(_indeed_country("us"), "USA")
+        self.assertEqual(_indeed_job_key("https://ca.indeed.com/viewjob?jk=abc123"), "abc123")
+        indeed_job = {"title": "ML Engineer", "company": "Acme", "location": "Toronto", "url": "https://indeed.test/1", "source": "indeed"}
+        adzuna_duplicate = {"title": "ML Engineer", "company": "Acme", "location": "Toronto", "url": "https://adzuna.test/1", "source": "adzuna"}
+        with patch("src.job_finder.search_indeed", return_value=[indeed_job]), patch("src.job_finder.search_adzuna", return_value=[adzuna_duplicate]):
+            jobs, warnings = search_jobs("ML Engineer", app_id="id", app_key="key")
+        self.assertEqual(jobs, [indeed_job])
+        self.assertEqual(warnings, [])
+
     def test_database_parts_encode_password_and_require_ssl(self):
         with patch.dict(os.environ, {
             "DATABASE_URL": "",
