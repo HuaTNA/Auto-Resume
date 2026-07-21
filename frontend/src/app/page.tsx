@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { EmptyState, Section, StatusPill, WorkspacePage } from "@/components/workspace/WorkspaceUI";
 import { BirchIcon } from "@/components/icons/BirchIcons";
@@ -14,23 +15,38 @@ interface CareerRecord { id: number; job_title: string; company: string; status:
 function dateKey(offset = 0) { const date = new Date(); date.setDate(date.getDate() + offset); return date.toLocaleDateString("en-CA"); }
 
 export default function CommandCenter() {
-  const { tasks, projects, knowledge, activities, updateTask, isLoading } = useWorkspace();
+  const { tasks, projects, knowledge, activities, updateTask, isLoading, error: workspaceError } = useWorkspace();
   const { text, language } = useLanguage();
+  const router = useRouter();
   const [career, setCareer] = useState<CareerRecord[]>([]);
+  const [careerLoaded, setCareerLoaded] = useState(false);
+  const [careerLoadFailed, setCareerLoadFailed] = useState(false);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const today = dateKey();
 
   useEffect(() => {
-    getHistory().then((result) => setCareer(result.records ?? [])).catch(() => setCareer([]));
+    getHistory()
+      .then((result) => setCareer(result.records ?? []))
+      .catch(() => setCareerLoadFailed(true))
+      .finally(() => setCareerLoaded(true));
     getHealth().then(() => setBackendOnline(true)).catch(() => setBackendOnline(false));
     listNotifications(true).then((result) => setNotifications(result.notifications)).catch(() => setNotifications([]));
   }, []);
 
-  const todayTasks = tasks.filter((task) => task.status === "todo" && (!task.due_date || task.due_date === today)).slice(0, 5);
+  useEffect(() => {
+    const hasWorkspaceData = projects.length > 0 || tasks.length > 0 || knowledge.length > 0 || career.length > 0;
+    if (!isLoading && careerLoaded && !workspaceError && !careerLoadFailed && !hasWorkspaceData) {
+      router.replace("/start");
+    }
+  }, [career.length, careerLoadFailed, careerLoaded, isLoading, knowledge.length, projects.length, router, tasks.length, workspaceError]);
+
+  const allTodayTasks = tasks.filter((task) => task.status === "todo" && (!task.due_date || task.due_date === today));
+  const todayTasks = allTodayTasks.slice(0, 5);
   const upcoming = tasks.filter((task) => task.status === "todo" && task.due_date && task.due_date > today).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 4);
-  const activeProjects = projects.filter((project) => project.status === "active" || project.status === "blocked").slice(0, 3);
+  const allActiveProjects = projects.filter((project) => project.status === "active" || project.status === "blocked");
+  const activeProjects = allActiveProjects.slice(0, 3);
   const activeApplications = career.filter((record) => ["suggested", "generated", "applied", "interview"].includes(record.status)).slice(0, 3);
   const suggestions = useMemo(() => {
     const items: Array<{ title: string; detail: string; href: string }> = [];
@@ -57,7 +73,7 @@ export default function CommandCenter() {
           <div className="flex flex-wrap gap-2.5"><Link href="/copilot" className="primary-button"><BirchIcon name="leaf" size={15} className="brightness-[4]" />{text("询问 AI", "Ask AI")}</Link><div className="relative"><button onClick={() => setCreateOpen((open) => !open)} aria-expanded={createOpen} aria-haspopup="menu" className="secondary-button"><span aria-hidden="true">＋</span>{text("新建", "Create")}<span aria-hidden="true">⌄</span></button>{createOpen && <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-30 w-52 rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] p-2 shadow-[0_16px_48px_rgba(30,26,20,0.16),0_4px_16px_rgba(30,26,20,0.08)]">{[{ href: "/projects?new=1", zh: "项目", en: "Project" }, { href: "/tasks?new=1", zh: "任务", en: "Task" }, { href: "/knowledge?new=1", zh: "知识内容", en: "Knowledge item" }, { href: "/generate", zh: "职业文档", en: "Career document" }].map((item) => <Link key={item.href} href={item.href} role="menuitem" onClick={() => setCreateOpen(false)} className="block rounded-[6px] px-3 py-2 text-xs hover:bg-[#FDFAF3]">{item[language]}</Link>)}</div>}</div></div>
         </div>
         <div className="mt-5 grid grid-cols-3 border-t border-[rgba(30,26,20,0.10)] pt-4">
-          {[{ value: todayTasks.length, zh: "今日任务", en: "Today" }, { value: activeProjects.length, zh: "活跃项目", en: "Projects" }, { value: notifications.length, zh: "未读通知", en: "Unread" }].map((item, index) => <div key={item.en} className={`px-4 first:pl-0 ${index ? "border-l border-[rgba(30,26,20,0.10)]" : ""}`}><p className="latin text-xl text-[#1E1A14]">{item.value}</p><p className="mt-0.5 text-[10px] text-[#7A6A50]">{language === "zh" ? item.zh : item.en}</p></div>)}
+          {[{ value: allTodayTasks.length, zh: "今日任务", en: "Today" }, { value: allActiveProjects.length, zh: "活跃项目", en: "Projects" }, { value: notifications.length, zh: "未读通知", en: "Unread" }].map((item, index) => <div key={item.en} className={`px-4 first:pl-0 ${index ? "border-l border-[rgba(30,26,20,0.10)]" : ""}`}><p className="latin text-xl text-[#1E1A14]">{item.value}</p><p className="mt-0.5 text-[10px] text-[#7A6A50]">{language === "zh" ? item.zh : item.en}</p></div>)}
         </div>
       </section>
 
@@ -73,7 +89,7 @@ export default function CommandCenter() {
         </div>
 
         <div className="space-y-5">
-          <Section title={text("AI 建议", "AI Suggestions")} eyebrow={text("基于当前工作区", "From workspace context")}>
+          <Section title={text("下一步建议", "Suggested next steps")} eyebrow={text("基于当前工作区规则", "From workspace rules")}>
             <div className="rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-3">{suggestions.map((item, index) => <Link key={item.title} href={item.href} className={`group flex gap-3 rounded-[6px] p-3 transition-all duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-1 hover:bg-[#FDFAF3] ${index ? "border-t border-[rgba(30,26,20,0.12)]" : ""}`}><span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-[6px] bg-[#F5EFE0]"><BirchIcon name="leaf" size={16} /></span><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{item.title}</span><span className="mt-1 block text-[10px] leading-5 text-[#7A6A50]">{item.detail}</span></span><span className="mt-1 text-[#9A8468]" aria-hidden="true">→</span></Link>)}</div>
           </Section>
 

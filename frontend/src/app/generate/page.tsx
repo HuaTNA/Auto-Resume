@@ -27,6 +27,12 @@ interface ATSResult {
   };
 }
 
+interface GenerateDraft {
+  jd: string;
+  role?: string;
+  company?: string;
+}
+
 export default function GeneratePage() {
   return (
     <Suspense>
@@ -53,28 +59,48 @@ function GenerateContent() {
   const [atsResult, setAtsResult] = useState<ATSResult | null>(null);
   const [rounds, setRounds] = useState<{ round: number; overall: number }[]>([]);
   const [historyRecordId, setHistoryRecordId] = useState<number | null>(null);
-  const [profileIssues, setProfileIssues] = useState<string[]>([]);
+  const [profileBlocking, setProfileBlocking] = useState<string[]>([]);
+  const [profileWarnings, setProfileWarnings] = useState<string[]>([]);
+  const [draftContext, setDraftContext] = useState<GenerateDraft | null>(null);
   const [error, setError] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
   const [previewTab, setPreviewTab] = useState<"resume" | "cover">("resume");
 
   useEffect(() => {
-    getProfileCompleteness().then((result) => setProfileIssues([...(result.blocking || []), ...(result.warnings || [])])).catch(() => undefined);
+    getProfileCompleteness().then((result) => {
+      setProfileBlocking(result.blocking || []);
+      setProfileWarnings(result.warnings || []);
+    }).catch(() => undefined);
+    const savedDraft = window.sessionStorage.getItem("hua:generate-draft");
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft) as GenerateDraft;
+        if (parsed.jd) {
+          setJdText(parsed.jd);
+          setDraftContext(parsed);
+        }
+      } catch {
+        window.sessionStorage.removeItem("hua:generate-draft");
+      }
+    }
   }, []);
 
   async function handleGenerate() {
-    if (!jdText.trim()) return;
+    if (!jdText.trim() || profileBlocking.length > 0) return;
     setError("");
     setHistoryRecordId(null);
 
     try {
       setStep("parsing");
-      setStatusMsg("Queueing generation...");
+      setStatusMsg(text("正在建立生成任务…", "Preparing generation…"));
       const key = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
       let job = (await createGenerationJob(jdText, template, genCoverLetter, key)).job;
+      let pollingAttempts = 0;
       while (job.status === "queued" || job.status === "running") {
+        pollingAttempts += 1;
+        if (pollingAttempts > 240) throw new Error(text("生成等待时间过长，请稍后从申请记录中查看。", "Generation is taking longer than expected. Check Applications again shortly."));
         setStep(job.status === "queued" ? "parsing" : "generating");
-        setStatusMsg(job.status === "queued" ? "Waiting for generation worker..." : `Generating application materials... ${job.progress}%`);
+        setStatusMsg(job.status === "queued" ? text("正在等待生成服务…", "Waiting for generation service…") : text(`正在生成申请材料… ${job.progress}%`, `Creating application materials… ${job.progress}%`));
         await new Promise((resolve) => setTimeout(resolve, 1000));
         job = (await getGenerationJob(job.id)).job;
       }
@@ -87,8 +113,10 @@ function GenerateContent() {
       setAtsResult(result.ats_result);
       setRounds(result.optimization_rounds || []);
       setHistoryRecordId(result.record_id);
+      window.sessionStorage.removeItem("hua:generate-draft");
       setStep("result");
       setStatusMsg("");
+      setDraftContext(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
       setStep("input");
@@ -112,17 +140,17 @@ function GenerateContent() {
   return (
     <>
       <Header
-        eyebrow={{ zh: "申请文书 · 成文", en: "APPLICATION STUDIO · CREATE" }}
-        title={{ zh: "因职成文", en: "Tailor an application" }}
-        subtitle={{ zh: "读懂职位所需，再从真实经历中取材成篇。", en: "Read what the role needs, then shape an answer from real experience." }}
+        eyebrow={{ zh: "简历工作室", en: "RESUME STUDIO" }}
+        title={{ zh: "生成定制简历", en: "Create a tailored resume" }}
+        subtitle={{ zh: "粘贴职位描述，桦会从你的真实经历中选择最相关的证据。", en: "Paste a job description and Hua will select the most relevant evidence from your real experience." }}
       />
 
-      <div className="mx-auto w-full max-w-[960px] p-5 sm:p-8 lg:p-10">
+      <div className="mx-auto w-full max-w-[960px] p-5 sm:p-7 lg:p-7">
         {/* Progress bar */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="mb-5 flex items-center gap-4">
           <div className="flex items-center gap-2">
             <StepIndicator num={1} active={step === "input"} done={step !== "input"} />
-            <span className="text-sm font-normal">{text("职位", "Role")}</span>
+            <span className="text-sm font-normal">{text("职位描述", "Job description")}</span>
           </div>
           <div className="flex-1 h-0.5 bg-[#B8A98A]" />
           <div className="flex items-center gap-2">
@@ -131,7 +159,7 @@ function GenerateContent() {
               active={step === "parsing" || step === "bullets"}
               done={["generating", "result"].includes(step)}
             />
-            <span className="text-sm font-normal">{text("辨析", "Analyze")}</span>
+            <span className="text-sm font-normal">{text("生成", "Generate")}</span>
           </div>
           <div className="flex-1 h-0.5 bg-[#B8A98A]" />
           <div className="flex items-center gap-2">
@@ -140,51 +168,51 @@ function GenerateContent() {
               active={step === "generating"}
               done={step === "result"}
             />
-            <span className="text-sm font-normal">{text("成文", "Create")}</span>
+            <span className="text-sm font-normal">{text("审核下载", "Review")}</span>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-[#EBE2CC] border border-[rgba(30,26,20,0.12)] rounded-lg text-[#1E1A14] text-sm">
+          <div role="alert" className="mb-6 rounded-[8px] border border-[rgba(30,26,20,0.16)] bg-[#F5EFE0] p-4 text-sm text-[#1E1A14]">
             {error}
           </div>
         )}
-        {step === "input" && profileIssues.length > 0 && <div className="mb-6 rounded-lg border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-4 text-xs"><p className="font-medium">{text("生成前建议完善", "Before generating")}</p><ul className="mt-2 list-disc space-y-1 pl-5">{profileIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
+        {step === "input" && profileBlocking.length > 0 && <div className="mb-5 flex flex-col gap-4 rounded-[12px] border border-[rgba(30,26,20,0.16)] bg-[#F5EFE0] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{text("职业档案还不能用于生成", "Your career profile is not ready yet")}</p><p className="mt-1 text-sm text-[#7A6A50]">{text(`还需完成 ${profileBlocking.length} 项必要信息：至少一段经历或项目、成果证据及基本联系方式。`, `${profileBlocking.length} required profile item(s) still need attention, including experience evidence and contact details.`)}</p></div><Link href="/profile" className="secondary-button shrink-0">{text("现在完善", "Complete profile")}<span aria-hidden="true">→</span></Link></div>}
 
         {/* Step 1: Input */}
         {step === "input" && (
-          <div className="space-y-6">
-            <div className="rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-6 sm:p-8">
-              <div className="max-w-3xl mx-auto text-center">
-                <BirchIcon name="bark" size={40} className="mx-auto mb-4" />
-                <h2 className="mb-3 text-2xl font-light tracking-[0.1em]">{text("贴入职位描述", "Add the job description")}</h2>
-                <p className="text-[#7A6A50] mb-6">
-                  {text("桦将辨析职责与能力要求，并从你的经历中选择相称的证据。", "桦 will read the responsibilities and select fitting evidence from your experience.")}
-                </p>
+          <div>
+            <div className="overflow-hidden rounded-[16px] border border-[rgba(30,26,20,0.14)] bg-[#F5EFE0] shadow-[0_10px_32px_rgba(30,26,20,0.07)]">
+              <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[0.7fr_1.3fr] lg:gap-8">
+                <div>
+                  <span className="flex size-11 items-center justify-center rounded-[6px] bg-[#1E1A14] text-[#F5EFE0]"><BirchIcon name="bark" size={24} className="brightness-[4]" /></span>
+                  <p className="eyebrow mt-5 text-[#7A6A50]">Step 01</p>
+                  <h2 className="mt-2 text-2xl font-medium tracking-[0.04em]">{text("粘贴完整职位描述", "Paste the full job description")}</h2>
+                  <p className="mt-3 text-sm leading-7 text-[#7A6A50]">{text("职责、技能要求和加分项越完整，匹配越准确。桦只会使用职业档案中已有的真实证据。", "Include responsibilities, requirements, and preferred skills for a better match. Hua only uses evidence already in your career profile.")}</p>
+                  {draftContext?.role && <div className="mt-5 rounded-[8px] bg-[#EBE2CC] px-3 py-3 text-sm"><p className="font-medium">{draftContext.role}</p>{draftContext.company && <p className="mt-1 text-[#7A6A50]">{draftContext.company}</p>}</div>}
+                  <p className="mt-5 text-sm leading-6 text-[#1E1A14]">✓ {text("仅使用真实经历 · 生成后可审核 · 自动保存到申请记录", "Real experience only · Review before using · Saved to Applications")}</p>
+                </div>
                 <textarea
                   value={jdText}
                   onChange={(e) => setJdText(e.target.value)}
-                  className="w-full min-h-[250px] p-6 rounded-xl border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] focus:border-[#1E1A14] focus:ring-0 text-[#1E1A14] resize-none text-sm"
+                  className="min-h-[240px] w-full resize-y rounded-[10px] border border-[rgba(30,26,20,0.16)] bg-[#FDFAF3] p-5 text-[15px] leading-7 text-[#1E1A14] focus:border-[#1E1A14] focus:ring-0"
                   placeholder={text("在此贴入完整职位描述…", "Paste the full job description here…")}
                 />
               </div>
-            </div>
-
-            {/* Options */}
-            <div className="soft-card flex flex-wrap items-center justify-between gap-6 rounded-[16px] p-5 sm:p-6">
-              <div className="flex items-center gap-4">
-                <label className="text-sm font-medium text-[#7A6A50]">{text("范式：", "Template:")}</label>
+              <div className="flex flex-col gap-4 border-t border-[rgba(30,26,20,0.10)] bg-[#EDE7D3] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+              <div className="flex flex-wrap items-center gap-5">
+                <label className="flex items-center gap-3 text-sm font-medium text-[#1E1A14]">{text("简历模板", "Resume template")}
                 <select
                   value={template}
                   onChange={(e) => setTemplate(e.target.value)}
-                  className="text-sm border border-[rgba(30,26,20,0.12)] rounded-lg px-3 py-2"
+                  className="rounded-[6px] border border-[rgba(30,26,20,0.14)] bg-[#F5EFE0] px-3 py-2 text-sm"
                 >
                   <option value="classic">Classic</option>
                   <option value="modern">Modern</option>
                   <option value="consulting">Consulting</option>
                 </select>
-              </div>
-              <label className="flex items-center gap-2 text-sm">
+                </label>
+              <label className="flex min-h-10 items-center gap-2 text-sm text-[#1E1A14]">
                 <input
                   type="checkbox"
                   checked={genCoverLetter}
@@ -193,15 +221,18 @@ function GenerateContent() {
                 />
                 {text("生成求职信", "Generate cover letter")}
               </label>
+              </div>
               <button
                 onClick={handleGenerate}
-                disabled={!jdText.trim()}
-                className="primary-button px-8 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!jdText.trim() || profileBlocking.length > 0}
+                className="primary-button min-h-11 px-8 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <BirchIcon name="leaf" size={18} />
-                {text("生成履历", "Generate resume")}
+                {profileBlocking.length > 0 ? text("先完善档案", "Complete profile first") : text("生成定制简历", "Generate tailored resume")}
               </button>
+              </div>
             </div>
+            {profileWarnings.length > 0 && profileBlocking.length === 0 && <p className="mt-3 text-sm text-[#7A6A50]">{text(`档案可以生成；另有 ${profileWarnings.length} 项可选信息可稍后补充。`, `Your profile is ready. ${profileWarnings.length} optional item(s) can be completed later.`)}</p>}
           </div>
         )}
 
@@ -217,7 +248,7 @@ function GenerateContent() {
             )}
             {totalBullets > 0 && (
               <p className="text-sm text-[#9A8468] mt-1">
-                Selected {totalBullets} relevant bullets
+                {text(`已选择 ${totalBullets} 条相关经历证据`, `${totalBullets} relevant evidence bullets selected`)}
               </p>
             )}
           </div>
@@ -232,15 +263,15 @@ function GenerateContent() {
               <div className="soft-card p-6">
                 <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
                   <BirchIcon name="growth-ring" size={20} />
-                  ATS Optimization Score
+                  {text("匹配概览", "Match overview")}
                 </h3>
                 <div className="space-y-4">
-                  <ScoreBar label="Overall Match" value={atsResult.semantic.overall_score} />
+                  <ScoreBar label={text("整体匹配", "Overall match")} value={atsResult.semantic.overall_score} />
                   <div className="grid grid-cols-2 gap-4">
-                    <ScoreBox label="Keywords" value={`${atsResult.keyword_match.score}%`} />
-                    <ScoreBox label="Relevance" value={`${atsResult.semantic.relevance_score}%`} />
-                    <ScoreBox label="Impact" value={`${atsResult.semantic.impact_score}%`} />
-                    <ScoreBox label="Rounds" value={rounds.length.toString()} />
+                    <ScoreBox label={text("关键词", "Keywords")} value={`${atsResult.keyword_match.score}%`} />
+                    <ScoreBox label={text("相关性", "Relevance")} value={`${atsResult.semantic.relevance_score}%`} />
+                    <ScoreBox label={text("影响力", "Impact")} value={`${atsResult.semantic.impact_score}%`} />
+                    <ScoreBox label={text("优化轮次", "Rounds")} value={rounds.length.toString()} />
                   </div>
                 </div>
               </div>
@@ -248,7 +279,7 @@ function GenerateContent() {
               {/* JD Info */}
               {jdAnalysis && (
                 <div className="soft-card p-6">
-                  <h3 className="text-lg font-medium mb-3">Job Analysis</h3>
+                  <h3 className="text-lg font-medium mb-3">{text("职位解析", "Job analysis")}</h3>
                   <p className="text-sm font-medium">{(jdAnalysis as Record<string, string>).job_title}</p>
                   <p className="text-sm text-[#9A8468]">{(jdAnalysis as Record<string, string>).company} - {(jdAnalysis as Record<string, string>).seniority}</p>
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -264,7 +295,7 @@ function GenerateContent() {
               {/* Suggestions */}
               {atsResult.semantic.suggestions.length > 0 && (
                 <div className="soft-card p-6">
-                  <h3 className="text-sm font-medium mb-3">Suggestions</h3>
+                  <h3 className="text-sm font-medium mb-3">{text("改进建议", "Suggestions")}</h3>
                   <div className="space-y-2">
                     {atsResult.semantic.suggestions.map((s, i) => (
                       <div key={i} className="flex items-start gap-2 text-sm text-[#7A6A50]">
@@ -285,11 +316,11 @@ function GenerateContent() {
               />
             </div>
 
-            {/* Right panel - LaTeX preview */}
+            {/* Right panel - document preview */}
             <div className="lg:col-span-8">
               <div className="soft-card relative overflow-hidden">
                 <div className="absolute top-4 right-4 bg-[#EBE2CC] px-3 py-1 rounded text-[10px] text-[#9A8468]  tracking-widest uppercase">
-                  {previewTab === "resume" ? "LaTeX Preview" : "Cover Letter Preview"}
+                  {previewTab === "resume" ? text("成品预览", "Document preview") : text("求职信预览", "Cover letter preview")}
                 </div>
 
                 {/* Tab bar */}
@@ -299,9 +330,7 @@ function GenerateContent() {
                 </div>
 
                 {previewTab === "resume" ? (
-                  <pre className="p-8 overflow-auto max-h-[800px] text-xs leading-relaxed font-mono text-[#7A6A50] whitespace-pre-wrap">
-                    {resumeTex}
-                  </pre>
+                  <ResumePreview recordId={historyRecordId} resumeTex={resumeTex} />
                 ) : (
                   <div className="p-8 overflow-auto max-h-[800px] text-sm leading-relaxed text-[#7A6A50] whitespace-pre-wrap">
                     {coverLetter}
@@ -361,6 +390,42 @@ function TabButton({ label, active = false, onClick }: { label: string; active?:
       {label}
     </button>
   );
+}
+
+function ResumePreview({ recordId, resumeTex }: { recordId: number | null; resumeTex: string }) {
+  const { text } = useLanguage();
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [loading, setLoading] = useState(Boolean(recordId));
+  const [previewError, setPreviewError] = useState("");
+
+  useEffect(() => {
+    if (!recordId) return;
+    let active = true;
+    let objectUrl = "";
+    compilePdf(recordId)
+      .then((result) => {
+        if (!active) return;
+        if (!result.ok || !result.pdf_base64) throw new Error(result.error || "PDF preview unavailable");
+        const bytes = Uint8Array.from(atob(result.pdf_base64), (character) => character.charCodeAt(0));
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        setPdfUrl(objectUrl);
+      })
+      .catch(() => {
+        if (active) setPreviewError(text("暂时无法生成 PDF 预览，你仍可下载源文件或稍后重试。", "PDF preview is temporarily unavailable. You can still download the source or retry later."));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [recordId, text]);
+
+  if (loading) return <div className="flex min-h-[680px] flex-col items-center justify-center bg-[#E8E1D0] p-8"><div className="h-[540px] w-full max-w-[390px] animate-pulse rounded-[4px] bg-[#FDFAF3] shadow-[0_14px_40px_rgba(30,26,20,0.14)]" /><p className="mt-5 text-sm text-[#7A6A50]">{text("正在生成成品预览…", "Preparing document preview…")}</p></div>;
+  if (pdfUrl) return <div className="bg-[#E8E1D0] p-4 sm:p-6"><iframe title={text("定制简历 PDF 预览", "Tailored resume PDF preview")} src={`${pdfUrl}#toolbar=0&navpanes=0`} className="h-[760px] w-full rounded-[4px] bg-[#FDFAF3] shadow-[0_14px_40px_rgba(30,26,20,0.16)]" /></div>;
+
+  return <div className="p-6 sm:p-8"><div className="rounded-[10px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] p-5"><p className="text-sm leading-6 text-[#7A6A50]">{previewError || text("预览尚未生成。", "Preview is not available yet.")}</p></div><details className="mt-5 rounded-[8px] border border-[rgba(30,26,20,0.10)]"><summary className="cursor-pointer px-4 py-3 text-sm text-[#1E1A14]">{text("高级选项：查看 LaTeX 源码", "Advanced: view LaTeX source")}</summary><pre className="max-h-[520px] overflow-auto border-t border-[rgba(30,26,20,0.10)] p-5 font-mono text-xs leading-relaxed text-[#7A6A50] whitespace-pre-wrap">{resumeTex}</pre></details></div>;
 }
 
 function DownloadActions({
