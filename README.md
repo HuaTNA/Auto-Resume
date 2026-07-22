@@ -53,6 +53,31 @@ cd frontend && npm install && npm run dev
 
 Open <http://localhost:3000> in your browser.
 
+## How I Used Codex to Build This Project
+
+I used [Codex](https://developers.openai.com/codex/) as a coding agent to move Auto-Resume from a local resume prototype toward a deployable personal AI workspace. This is separate from the product's runtime AI: the application uses the Anthropic API to analyze jobs and generate career materials.
+
+The repository history records this work in `agent/*` and `codex/*` branches. Between July 15 and July 21, 2026, I opened 11 agent-assisted pull requests; PRs #1–#9 were merged through GitHub, while #10–#11 remain open.
+
+| Pull requests | Recorded Codex-assisted work |
+| ------------- | ---------------------------- |
+| [#1](https://github.com/HuaTNA/Auto-Resume/pull/1) | Moved a machine-specific Notion/Indeed job tracker into the repository, replaced local paths with portable ones, documented setup, and protected credentials and runtime files. |
+| [#2](https://github.com/HuaTNA/Auto-Resume/pull/2) | Completed the secure MVP across 7 commits: cloud workspace APIs, career automation, OAuth, invite-only registration, persistent quotas, durable generation jobs, safer PDF compilation, editable document history, UI refinement, CI, and regression tests. |
+| [#3](https://github.com/HuaTNA/Auto-Resume/pull/3)–[#4](https://github.com/HuaTNA/Auto-Resume/pull/4) | Diagnosed two Vercel deployment problems from their root causes: excluded frontend source files and stale client API URLs bypassing the same-origin proxy. |
+| [#5](https://github.com/HuaTNA/Auto-Resume/pull/5)–[#7](https://github.com/HuaTNA/Auto-Resume/pull/7) | Built user-facing career workflows: full profile editing, restored Indeed + Adzuna search with source labels and graceful fallback, and explicit multi-job selection before spending AI quota on resume generation. |
+| [#8](https://github.com/HuaTNA/Auto-Resume/pull/8)–[#9](https://github.com/HuaTNA/Auto-Resume/pull/9) | Hardened AI and deployment reliability by retrying truncated structured responses and ensuring the three LaTeX templates are included in the Vercel bundle. |
+| [#10](https://github.com/HuaTNA/Auto-Resume/pull/10)–[#11](https://github.com/HuaTNA/Auto-Resume/pull/11) | Proposed a narrowly allow-listed PDF glyph-map fix, separated job-match scores from generated-resume ATS scores, and improved the first-run career experience. |
+
+The PR record also shows how I worked with Codex:
+
+1. Each PR starts from a concrete product problem or production failure and states the intended outcome.
+2. Several PR descriptions record a root-cause investigation before the fix, including the missing Vercel source bundle, proxy bypass, absent Indeed integration, missing user-selection step, and excluded LaTeX templates.
+3. Changes were made on isolated branches, including backend, frontend, tests, and documentation when the task crossed those boundaries.
+4. Each PR records its relevant verification. Across these PRs, the backend suite grew from 16 to 23 tests; validation also included ESLint, Hua UI rules, Next.js production builds, Python compilation, live JobSpy checks, PDF generation, and diff checks.
+5. Accepted work reached `main` through GitHub PR merges; the two unmerged changes remain isolated on their branches.
+
+This history reflects how I use Codex: not just to generate code, but to investigate failures, preserve safety boundaries, add regression coverage, and leave each change in a reviewable state. I remain responsible for the requirements, product decisions, credentials, deployment approval, and final merge.
+
 ## Setup
 
 ```bash
