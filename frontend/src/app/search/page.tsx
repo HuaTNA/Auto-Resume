@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { BirchIcon } from "@/components/icons/BirchIcons";
 import { searchJobs } from "@/lib/api";
@@ -10,6 +11,7 @@ import { useLanguage } from "@/lib/language-context";
 interface Job { title: string; company: string; location: string; description: string; url: string; salary_min: number | null; salary_max: number | null; created: string; match_score: number; match_reason: string }
 
 export default function SearchPage() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("canada");
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -22,10 +24,15 @@ export default function SearchPage() {
 
   async function handleSearch() {
     if (!query.trim()) return;
-    setLoading(true); setError(""); setWarning(""); setSearched(true);
+    setLoading(true); setError(""); setWarning(""); setJobs([]); setSearched(true);
     try { const data = await searchJobs(query, location); setJobs(data.jobs); setWarning(data.ranking_warning ?? ""); }
     catch (e) { setError(e instanceof Error ? e.message : "Search failed"); }
     finally { setLoading(false); }
+  }
+
+  function handleGenerateForJob(job: Job) {
+    window.sessionStorage.setItem("hua:generate-draft", JSON.stringify({ jd: job.description, role: job.title, company: job.company }));
+    router.push("/generate");
   }
 
   return (
@@ -38,7 +45,7 @@ export default function SearchPage() {
             <div><p className="eyebrow text-[#9A8468]">{text("有意而寻", "Search with intention")}</p><h2 className="mt-1 text-lg font-normal tracking-[0.1em]">{text("从一个方向开始", "Begin with a direction")}</h2></div>
           </div>
           <div className="grid gap-3 md:grid-cols-[1.4fr_0.8fr_auto]">
-            <label><span className="mb-1.5 block text-[11px] tracking-[0.08em] text-[#7A6A50]">{text("职位或关键词", "Role or keywords")}</span><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSearch()} className="w-full px-4 py-3 text-sm" placeholder={text("例如：产品设计师", "e.g. Product Designer")} /></label>
+            <label><span className="mb-1.5 block text-[11px] tracking-[0.08em] text-[#7A6A50]">{text("职位或关键词", "Role or keywords")}</span><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && handleSearch()} className="w-full px-4 py-3 text-sm" placeholder={text("例如：产品设计师", "e.g. Product Designer")} /></label>
             <label><span className="mb-1.5 block text-[11px] tracking-[0.08em] text-[#7A6A50]">{text("地域", "Location")}</span><select value={location} onChange={(e) => setLocation(e.target.value)} className="w-full px-4 py-3 text-sm"><option value="canada">Canada</option><option value="us">United States</option><option value="uk">United Kingdom</option><option value="australia">Australia</option><option value="germany">Germany</option></select></label>
             <button onClick={handleSearch} disabled={loading || !query.trim()} className="primary-button self-end px-8 disabled:translate-y-0 disabled:opacity-50">{loading ? text("寻觅中…", "Searching…") : text("开始寻职", "Search")}</button>
           </div>
@@ -76,7 +83,7 @@ export default function SearchPage() {
                 <div className="rounded-[6px] border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] px-3 py-2 text-center"><p className="latin text-[9px] uppercase tracking-[0.22em] text-[#9A8468]">Match</p><p className="latin text-xl font-normal text-[#1E1A14]">{job.match_score > 0 ? `${job.match_score}%` : "—"}</p></div>
               </div>
               <p className="mt-5 line-clamp-2 text-sm leading-7 text-[#7A6A50]">{job.description}</p><p className="latin mt-2 text-sm italic leading-6 text-[#9A8468]">{job.match_score > 0 ? job.match_reason : text("暂未进行 AI 匹配排序", "AI match ranking not available yet")}</p>
-              <div className="mt-5 flex items-center justify-between border-t border-[rgba(30,26,20,0.12)] pt-4"><span className="latin text-[10px] tracking-[0.14em] text-[#9A8468]">{job.created?.slice(0, 10)}</span><a href={job.url} target="_blank" rel="noopener noreferrer" className="secondary-button min-h-10 py-1.5">{text("查看职位", "View job")} <span aria-hidden="true">↗</span></a></div>
+              <div className="mt-5 flex flex-col gap-3 border-t border-[rgba(30,26,20,0.12)] pt-4 sm:flex-row sm:items-center sm:justify-between"><span className="latin text-[10px] tracking-[0.14em] text-[#9A8468]">{job.created?.slice(0, 10)}</span><div className="flex flex-wrap gap-2"><a href={job.url} target="_blank" rel="noopener noreferrer" className="secondary-button min-h-10 py-1.5">{text("查看原职位", "View original")} <span aria-hidden="true">↗</span></a><button onClick={() => handleGenerateForJob(job)} className="primary-button min-h-10 py-1.5">{text("为此职位生成材料", "Create materials")}<span aria-hidden="true">→</span></button></div></div>
             </article>
           ))}
         </div></div>}

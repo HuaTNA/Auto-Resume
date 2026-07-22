@@ -936,10 +936,11 @@ def api_history(
         lr["has_cover_letter"] = bool(r.get("cover_letter"))
         application = application_by_history.get(r["id"])
         lr["approval_status"] = application.approval_status if application else None
+        lr["match_score"] = application.match_score if application else 0
         light_records.append(lr)
 
     scores = [r["ats_scores"]["overall"] for r in records
-              if r.get("ats_scores", {}).get("overall") is not None]
+              if r.get("resume_tex") and r.get("ats_scores", {}).get("overall") is not None]
     stats = {
         "total": len(records),
         "avg_score": round(sum(scores) / len(scores), 1) if scores else 0,
@@ -992,6 +993,7 @@ def api_career_applications(
                 "id": application.public_id,
                 "legacy_record_id": application.history_record_id,
                 "status": application.status,
+                "match_score": application.match_score,
                 "created_at": application.created_at.isoformat(),
                 "updated_at": application.updated_at.isoformat(),
                 "job": {

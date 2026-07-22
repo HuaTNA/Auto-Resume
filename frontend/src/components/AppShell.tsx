@@ -33,7 +33,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#E8E1D0]">
+    <div className="flex h-dvh overflow-hidden bg-[#E8E1D0]">
       <Sidebar />
       <main className="workspace-canvas min-w-0 flex-1 overflow-y-auto pb-24 lg:pb-0">{children}</main>
       <MobileNav />

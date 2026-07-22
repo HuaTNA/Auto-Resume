@@ -15,6 +15,8 @@ interface CareerRecord {
   job_title: string;
   company: string;
   status: string;
+  match_score: number;
+  has_resume: boolean;
   ats_scores: { overall: number | null };
 }
 
@@ -34,8 +36,10 @@ export default function CareerPage() {
 
   const active = records.filter((record) => ["generated", "applied", "interview"].includes(record.status));
   const interviewCount = records.filter((record) => record.status === "interview").length;
-  const scores = records.map((record) => record.ats_scores.overall).filter((score): score is number => score != null);
-  const averageScore = scores.length ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : null;
+  const atsScores = records.filter((record) => record.has_resume).map((record) => record.ats_scores.overall).filter((score): score is number => score != null);
+  const matchScores = records.map((record) => record.match_score).filter((score) => score > 0);
+  const averageAts = atsScores.length ? Math.round(atsScores.reduce((total, score) => total + score, 0) / atsScores.length) : null;
+  const averageMatch = matchScores.length ? Math.round(matchScores.reduce((total, score) => total + score, 0) / matchScores.length) : null;
   const latest = records[0];
 
   const nextMove = useMemo(() => {
@@ -69,7 +73,7 @@ export default function CareerPage() {
 
   const primaryTools: Array<{ href: string; icon: BirchIconName; title: string; detail: string; meta: string; tone: "light" | "warm" | "dark" }> = [
     { href: "/search", icon: "bud", title: text("职位与匹配", "Jobs & Match"), detail: text("寻找、判断并保存值得投入的职位。", "Find, assess, and save roles worth your time."), meta: text("发现", "DISCOVER"), tone: "warm" },
-    { href: "/generate", icon: "branch", title: text("简历工作室", "Resume Studio"), detail: text("生成定制材料并提升 ATS 表现。", "Tailor your materials and improve ATS performance."), meta: averageScore == null ? text("待生成", "READY") : text(`平均 ${averageScore}%`, `AVG ${averageScore}%`), tone: "dark" },
+    { href: "/generate", icon: "branch", title: text("简历工作室", "Resume Studio"), detail: text("生成定制材料并提升 ATS 表现。", "Tailor your materials and improve ATS performance."), meta: averageAts == null ? text("待生成", "READY") : `ATS ${averageAts}%`, tone: "dark" },
     { href: "/career/applications", icon: "bark", title: text("申请追踪", "Applications"), detail: text("查看状态、版本、文档与下一步。", "See status, versions, documents, and next steps."), meta: text(`${active.length} 项活跃`, `${active.length} ACTIVE`), tone: "light" },
   ];
 
@@ -102,7 +106,7 @@ export default function CareerPage() {
             <div className="mt-4 grid grid-cols-3 divide-x divide-[rgba(245,239,224,0.14)]">
               <PulseValue value={loading ? "—" : String(active.length)} label={text("活跃申请", "Active")} />
               <PulseValue value={loading ? "—" : String(interviewCount)} label={text("面试", "Interviews")} />
-              <PulseValue value={loading ? "—" : averageScore == null ? "—" : `${averageScore}%`} label={text("平均匹配", "Avg match")} />
+              <PulseValue value={loading ? "—" : averageMatch == null ? "—" : `${averageMatch}%`} label={text("平均匹配", "Avg match")} />
             </div>
             <div className="mt-5 h-1 overflow-hidden rounded-[4px] bg-[rgba(245,239,224,0.12)]"><span className="block h-full bg-[#B8A98A]" style={{ width: `${Math.min(100, active.length * 18 + interviewCount * 16)}%` }} /></div>
             <p className="mt-2 text-[9px] leading-4 text-[#9A8468]">{text("进度来自申请状态与材料记录。", "Pulse reflects application stages and material history.")}</p>

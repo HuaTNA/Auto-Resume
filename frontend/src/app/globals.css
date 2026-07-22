@@ -11,6 +11,7 @@
   --color-text-sub: #9a8468;
   --color-text-muted: #7a6a50;
   --font-serif: "Noto Serif SC", "Songti SC", "STSong", serif;
+  --font-body: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 }
 
 :root {
@@ -46,9 +47,15 @@ body {
   margin: 0;
   background: var(--color-parchment);
   color: var(--color-ink);
-  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  font-family: var(--font-body);
   font-weight: 400;
   line-height: 1.7;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
 }
 
 button,
@@ -63,8 +70,8 @@ textarea {
 button,
 a {
   outline-offset: 3px;
-  transition-duration: 300ms !important;
-  transition-timing-function: var(--spring) !important;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
 }
 
 button:focus-visible,
@@ -117,11 +124,11 @@ textarea::placeholder {
 }
 
 .lift-card {
-  transition: transform 320ms var(--spring), box-shadow 320ms var(--spring), background-color 320ms var(--spring);
+  transition: transform 180ms ease-out, box-shadow 180ms ease-out, background-color 180ms ease-out;
 }
 
 .lift-card:hover {
-  transform: translateY(-6px);
+  transform: translateY(-2px);
   background: var(--color-card-hover);
   box-shadow: var(--shadow-hover);
 }
@@ -138,7 +145,7 @@ textarea::placeholder {
   font-size: 0.78rem;
   font-weight: 400;
   letter-spacing: 0.04em;
-  transition: transform 300ms var(--spring), box-shadow 300ms var(--spring), background-color 300ms var(--spring);
+  transition: transform 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out;
 }
 
 .primary-button {
@@ -157,7 +164,7 @@ textarea::placeholder {
 
 .primary-button:hover,
 .secondary-button:hover {
-  transform: translateY(-4px);
+  transform: translateY(-1px);
   box-shadow: var(--shadow-static);
 }
 
@@ -300,6 +307,31 @@ textarea::placeholder {
   box-shadow: 0 24px 70px rgba(30, 26, 20, 0.14), 0 2px 8px rgba(30, 26, 20, 0.06);
 }
 
+/* Readability guardrails for the warm editorial palette. */
+[class~="text-[#9A8468]"] {
+  color: #7a6a50;
+}
+
+[class~="text-[#7A6A50]"] {
+  color: #1e1a14;
+}
+
+.workspace-sidebar [class~="text-[7px]"],
+.workspace-sidebar [class~="text-[8px]"],
+.workspace-sidebar [class~="text-[9px]"],
+.workspace-canvas [class~="text-[7px]"],
+.workspace-canvas [class~="text-[8px]"],
+.workspace-canvas [class~="text-[9px]"] {
+  font-size: 0.75rem;
+}
+
+.workspace-sidebar [class~="text-[10px]"],
+.workspace-sidebar [class~="text-[11px]"],
+.workspace-canvas [class~="text-[10px]"],
+.workspace-canvas [class~="text-[11px]"] {
+  font-size: 0.8125rem;
+}
+
 @media (max-width: 1023px) {
   .workspace-header {
     box-shadow: none;
@@ -335,6 +367,11 @@ textarea::placeholder {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  button,
+  a {
     transition-duration: 0.01ms !important;
   }
 }

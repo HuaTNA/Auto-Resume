@@ -116,7 +116,7 @@ def ensure_application_for_job(db: Session, user: User, job: CareerJob) -> Caree
         user_id=user.id, timestamp=datetime.now().isoformat(),
         job_title=job.title, company=job.company, seniority="",
         required_skills="[]", template="classic",
-        ats_scores=_dump({"overall": match_score}), output_files="[]",
+        ats_scores="{}", output_files="[]",
         resume_tex="", cover_letter="", status="suggested",
     )
     db.add(history); db.flush()
@@ -231,7 +231,7 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
                 user_id=user.id, timestamp=datetime.now().isoformat(),
                 job_title=job.title, company=job.company, seniority="",
                 required_skills="[]", template=str(config.get("template") or "classic"),
-                ats_scores=_dump({"overall": job_data.get("match_score", 0)}),
+                ats_scores="{}",
                 output_files="[]", resume_tex="", cover_letter="", status="suggested",
             )
             db.add(history); db.flush()
