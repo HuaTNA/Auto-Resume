@@ -550,12 +550,19 @@ def mark_notification_read(public_id: str, current_user: User = Depends(get_curr
     row.read_at = datetime.utcnow(); db.commit(); return {"ok": True}
 
 
-@router.post("/internal/automations/run-due")
-def run_due(x_cron_secret: str | None = Header(default=None), limit: int = Query(10, ge=1, le=50), db: Session = Depends(get_db)):
+@router.api_route("/internal/automations/run-due", methods=["GET", "POST"])
+def run_due(
+    authorization: str | None = Header(default=None),
+    x_cron_secret: str | None = Header(default=None),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
     expected = os.environ.get("CRON_SECRET", "").strip()
     if not expected: raise HTTPException(503, "CRON_SECRET is not configured")
     import secrets
-    if not x_cron_secret or not secrets.compare_digest(x_cron_secret, expected): raise HTTPException(401, "Invalid cron secret")
+    bearer = authorization.removeprefix("Bearer ").strip() if authorization and authorization.startswith("Bearer ") else ""
+    supplied = x_cron_secret or bearer
+    if not supplied or not secrets.compare_digest(supplied, expected): raise HTTPException(401, "Invalid cron secret")
     runs = run_due_automations(db, limit)
     return {"ok": True, "processed": len(runs), "runs": runs}
 

@@ -27,6 +27,13 @@ POST /api/internal/automations/run-due
 X-Cron-Secret: <CRON_SECRET>
 ```
 
+The backend Vercel project registers this endpoint through `vercel.json` and
+invokes it daily at `14:00 UTC`. Vercel sends `CRON_SECRET` as an
+`Authorization: Bearer` header. This daily trigger reliably covers the default
+`America/Toronto` 09:00 schedule across daylight-saving changes, although a
+Hobby-plan invocation may occur later within the hour. Use the persistent worker
+for hourly schedules, tighter timing, or users in multiple time zones.
+
 ## Required environment
 
 - `ADZUNA_APP_ID`

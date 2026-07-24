@@ -14,10 +14,14 @@ from api.server import app
 
 class ApiIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.previous_env = {name: os.environ.get(name) for name in ("REGISTRATION_MODE", "JWT_SECRET", "PRODUCTION")}
+        self.previous_env = {
+            name: os.environ.get(name)
+            for name in ("REGISTRATION_MODE", "JWT_SECRET", "PRODUCTION", "CRON_SECRET")
+        }
         os.environ["REGISTRATION_MODE"] = "open"
         os.environ["JWT_SECRET"] = "a" * 64
         os.environ["PRODUCTION"] = "false"
+        os.environ["CRON_SECRET"] = "cron-secret-for-tests"
         self.engine = create_engine(
             "sqlite://",
             connect_args={"check_same_thread": False},
@@ -132,6 +136,22 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["records"][0]["match_score"], 80)
         self.assertEqual(payload["records"][0]["ats_scores"]["overall"], 72)
         self.assertEqual(payload["stats"]["avg_score"], 72)
+
+    def test_vercel_cron_can_run_due_automations_with_bearer_secret(self):
+        with patch("api.routes.workspace.run_due_automations", return_value=[]) as run_due:
+            response = self.client_a.get(
+                "/api/internal/automations/run-due",
+                headers={"Authorization": "Bearer cron-secret-for-tests"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["processed"], 0)
+        run_due.assert_called_once()
+
+        unauthorized = self.client_a.get(
+            "/api/internal/automations/run-due",
+            headers={"Authorization": "Bearer wrong-secret"},
+        )
+        self.assertEqual(unauthorized.status_code, 401)
 
     def test_career_document_version_updates_download_source(self):
         session = self.Session()

@@ -24,6 +24,11 @@ from src.templates import list_templates
 
 
 class CoreTests(unittest.TestCase):
+    def test_vercel_config_registers_daily_automation_cron(self):
+        config = (Path(__file__).parent.parent / "vercel.json").read_text(encoding="utf-8")
+        self.assertIn('"/api/internal/automations/run-due"', config)
+        self.assertIn('"0 14 * * *"', config)
+
     def test_vercel_bundle_keeps_resume_templates(self):
         ignore_rules = (Path(__file__).parent.parent / ".vercelignore").read_text(encoding="utf-8")
         self.assertNotIn("data/**", ignore_rules)
