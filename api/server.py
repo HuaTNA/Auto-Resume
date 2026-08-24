@@ -926,17 +926,24 @@ def api_history(
     for record in db_records:
         _ensure_career_application_db(current_user, db, record)
     records = [r.to_dict() for r in db_records]
-    applications = db.query(CareerApplication).filter(CareerApplication.user_id == current_user.id).all()
-    application_by_history = {item.history_record_id: item for item in applications}
+    application_rows = db.query(CareerApplication, CareerJob).join(
+        CareerJob, CareerApplication.job_id == CareerJob.id
+    ).filter(CareerApplication.user_id == current_user.id).all()
+    application_by_history = {
+        application.history_record_id: (application, job)
+        for application, job in application_rows
+    }
 
     light_records = []
     for r in records:
         lr = {k: v for k, v in r.items() if k not in ("resume_tex", "cover_letter")}
         lr["has_resume"] = bool(r.get("resume_tex"))
         lr["has_cover_letter"] = bool(r.get("cover_letter"))
-        application = application_by_history.get(r["id"])
+        application_row = application_by_history.get(r["id"])
+        application, job = application_row if application_row else (None, None)
         lr["approval_status"] = application.approval_status if application else None
         lr["match_score"] = application.match_score if application else 0
+        lr["source_url"] = job.source_url if job else None
         light_records.append(lr)
 
     scores = [r["ats_scores"]["overall"] for r in records
@@ -1002,6 +1009,9 @@ def api_career_applications(
                     "company": job.company,
                     "seniority": job.seniority,
                     "required_skills": json.loads(job.required_skills or "[]"),
+                    "source": job.source,
+                    "source_url": job.source_url,
+                    "location": job.location,
                 },
             }
             for application, job in rows

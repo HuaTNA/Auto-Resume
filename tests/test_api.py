@@ -116,7 +116,10 @@ class ApiIntegrationTests(unittest.TestCase):
         session = self.Session()
         try:
             user_id = self._user_id("a@example.com")
-            job = CareerJob(public_id="job-score", user_id=user_id, title="AI Engineer", company="Acme")
+            job = CareerJob(
+                public_id="job-score", user_id=user_id, title="AI Engineer", company="Acme",
+                source="adzuna", source_url="https://example.com/jobs/ai-engineer",
+            )
             session.add(job); session.flush()
             record = HistoryRecord(
                 user_id=user_id, timestamp=datetime.utcnow().isoformat(), job_title=job.title,
@@ -135,6 +138,7 @@ class ApiIntegrationTests(unittest.TestCase):
         payload = self.client_a.get("/api/history").json()
         self.assertEqual(payload["records"][0]["match_score"], 80)
         self.assertEqual(payload["records"][0]["ats_scores"]["overall"], 72)
+        self.assertEqual(payload["records"][0]["source_url"], "https://example.com/jobs/ai-engineer")
         self.assertEqual(payload["stats"]["avg_score"], 72)
 
     def test_vercel_cron_can_run_due_automations_with_bearer_secret(self):
