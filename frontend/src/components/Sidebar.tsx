@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { CAREER_ROUTES, PRIMARY_MODULES, routeIsActive, SYSTEM_ROUTES, type ModuleRoute } from "@/lib/module-registry";
@@ -27,7 +27,7 @@ function Brand() {
   );
 }
 
-function NavLink({ item, compact = false, onClick }: { item: ModuleRoute; compact?: boolean; onClick?: () => void }) {
+function NavLink({ item, compact = false, onClick, withAction = false }: { item: ModuleRoute; compact?: boolean; onClick?: () => void; withAction?: boolean }) {
   const pathname = usePathname();
   const { language } = useLanguage();
   const careerPath = pathname.startsWith("/career") || ["/search", "/generate", "/profile"].some((route) => pathname.startsWith(route));
@@ -41,7 +41,7 @@ function NavLink({ item, compact = false, onClick }: { item: ModuleRoute; compac
         active
           ? "border-[#1E1A14] bg-[rgba(30,26,20,0.07)] text-[#1E1A14]"
           : "border-transparent text-[#7A6A50] hover:bg-[rgba(30,26,20,0.04)] hover:text-[#1E1A14]"
-      } ${compact ? "ml-3 min-h-8 pl-3 text-[11px]" : ""}`}
+      } ${compact ? "ml-3 min-h-8 pl-3 text-[11px]" : ""} ${withAction ? "pr-14" : ""}`}
     >
       <span className={`flex shrink-0 items-center justify-center ${compact ? "size-6 rounded-[6px] bg-[#EBE2CC]" : "size-5"}`}>
         <BirchIcon name={item.icon} size={compact ? 14 : 16} />
@@ -51,6 +51,12 @@ function NavLink({ item, compact = false, onClick }: { item: ModuleRoute; compac
   );
 }
 
+function PinNavRow({ item, pinned, compact = false, onToggle }: { item: ModuleRoute; pinned: boolean; compact?: boolean; onToggle: () => void }) {
+  const { text } = useLanguage();
+  const action = pinned ? text("取消", "Unpin") : text("固定", "Pin");
+  return <div className="group/pin relative"><NavLink item={item} compact={compact} withAction /><button type="button" onClick={onToggle} aria-label={`${action} ${text(item.label.zh, item.label.en)}`} title={`${action} ${text(item.label.zh, item.label.en)}`} className="absolute right-2 top-1/2 min-h-7 -translate-y-1/2 rounded-[4px] px-1.5 text-[9px] text-[#9A8468] opacity-70 hover:bg-[#EBE2CC] hover:text-[#1E1A14] hover:opacity-100 focus:opacity-100">{action}</button></div>;
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <p className="latin px-3 pb-1 pt-4 text-[10px] uppercase tracking-[0.24em] text-[#7A6A50]">{children}</p>;
 }
@@ -58,6 +64,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 const CORE_CAREER_IDS = new Set(["career-jobs", "career-resume", "career-applications", "career-profile"]);
 const CORE_CAREER_ROUTES = CAREER_ROUTES.filter((item) => CORE_CAREER_IDS.has(item.id));
 const MORE_ROUTES = [...CAREER_ROUTES.filter((item) => !CORE_CAREER_IDS.has(item.id) && item.id !== "career-overview"), ...PRIMARY_MODULES.slice(2), SYSTEM_ROUTES[0]];
+const PIN_STORAGE_PREFIX = "hua-sidebar-pins";
 
 export default function Sidebar() {
   const router = useRouter();
@@ -65,6 +72,27 @@ export default function Sidebar() {
   const { text } = useLanguage();
   const [careerOpen, setCareerOpen] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+  const [pinsOwnerId, setPinsOwnerId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!user) { setPinnedIds([]); setPinsOwnerId(null); return; }
+      const allowedIds = new Set(MORE_ROUTES.map((item) => item.id));
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(`${PIN_STORAGE_PREFIX}:${user.id}`) ?? "[]");
+        setPinnedIds(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string" && allowedIds.has(id)) : []);
+      } catch {
+        setPinnedIds([]);
+      }
+      setPinsOwnerId(user.id);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && pinsOwnerId === user.id) window.localStorage.setItem(`${PIN_STORAGE_PREFIX}:${user.id}`, JSON.stringify(pinnedIds));
+  }, [pinnedIds, pinsOwnerId, user]);
 
   async function handleLogout() {
     await logout();
@@ -73,6 +101,9 @@ export default function Sidebar() {
 
   const home = PRIMARY_MODULES[0];
   const career = PRIMARY_MODULES[1];
+  const pinnedRoutes = pinnedIds.map((id) => MORE_ROUTES.find((item) => item.id === id)).filter((item): item is ModuleRoute => Boolean(item));
+  const unpinnedRoutes = MORE_ROUTES.filter((item) => !pinnedIds.includes(item.id));
+  function togglePin(id: string) { setPinnedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }
 
   return (
     <aside className="workspace-sidebar hidden h-screen w-[232px] shrink-0 flex-col overflow-y-auto border-r border-[rgba(30,26,20,0.10)] bg-[#EDE7D3] lg:flex">
@@ -106,6 +137,7 @@ export default function Sidebar() {
           </div>
           {careerOpen && <div className="ml-3 border-l border-[rgba(30,26,20,0.10)] py-1">{CORE_CAREER_ROUTES.map((item) => <NavLink key={item.id} item={item} compact />)}</div>}
         </div>
+        {pinnedRoutes.length > 0 && <><SectionLabel>{text("已固定", "Pinned")}</SectionLabel><div className="space-y-0.5">{pinnedRoutes.map((item) => <PinNavRow key={item.id} item={item} pinned onToggle={() => togglePin(item.id)} />)}</div></>}
         <SectionLabel>{text("按需展开", "When needed")}</SectionLabel>
         <button
           onClick={() => setMoreOpen((open) => !open)}
@@ -116,7 +148,7 @@ export default function Sidebar() {
           <span className="flex-1">{text("更多工具", "More tools")}</span>
           <span aria-hidden="true">{moreOpen ? "−" : "+"}</span>
         </button>
-        {moreOpen && <div className="mt-1 border-l border-[rgba(30,26,20,0.10)] pl-1">{MORE_ROUTES.map((item) => <NavLink key={item.id} item={item} compact />)}</div>}
+        {moreOpen && <div className="mt-1 border-l border-[rgba(30,26,20,0.10)] pl-1">{unpinnedRoutes.length > 0 ? unpinnedRoutes.map((item) => <PinNavRow key={item.id} item={item} pinned={false} compact onToggle={() => togglePin(item.id)} />) : <p className="px-4 py-3 text-[10px] leading-5 text-[#9A8468]">{text("所有工具都已固定", "All tools are pinned")}</p>}</div>}
         <div className="mt-2"><NavLink item={SYSTEM_ROUTES[1]} /></div>
       </nav>
 
