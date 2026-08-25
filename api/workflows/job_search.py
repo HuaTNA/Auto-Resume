@@ -194,6 +194,7 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
 
     new_count = duplicate_count = application_count = material_count = 0
     output_jobs = []
+    processed_job_ids: set[int] = set()
     generation_limit = _bounded(config.get("max_generate"), 1, 0, 3)
     generate_materials = bool(config.get("generate_materials", False))
     for job_data in jobs:
@@ -225,6 +226,16 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
             db.add(job); db.flush(); new_count += 1
         else:
             duplicate_count += 1
+            posted_at = parse_job_posted_at(job_data.get("created"))
+            if posted_at is not None:
+                job.posted_at = posted_at
+
+        # Different providers (or slightly different location strings) can
+        # resolve to the same canonical CareerJob. Only one match is allowed
+        # for a job within a run, so discard later copies before inserting.
+        if job.id in processed_job_ids:
+            continue
+        processed_job_ids.add(job.id)
 
         match = CareerJobMatch(
             public_id=str(uuid4()), user_id=user.id, automation_id=automation.id,

@@ -1,17 +1,22 @@
+import json
 import os
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from api.auth import create_oauth_state, decode_oauth_state, get_secret_key
-from api.database import Base, CareerApplication, CareerJob, HistoryRecord, User, _build_db_url
+from api.database import (
+    Automation, AutomationRun, Base, CareerApplication, CareerJob,
+    CareerJobMatch, HistoryRecord, User, _build_db_url,
+)
 from api.limits import enforce_external_api_limit
 from api.oauth import decrypt_credentials, encrypt_credentials, provider_statuses
 from api.routes.auth import _authorize_registration, _registration_mode
 from api.server import _validate_latex_safety, _wrap_cover_letter_tex
-from api.workflows.job_search import _job_qualifies, ensure_application_for_job
+from api.workflows.job_search import _job_qualifies, _job_search_pipeline, ensure_application_for_job
+from api.workflows.job_retention import cleanup_expired_jobs
 from api.workflows.scheduling import next_run_at
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -62,6 +67,150 @@ class CoreTests(unittest.TestCase):
             jobs, warnings = search_jobs("ML Engineer", app_id="id", app_key="key")
         self.assertEqual(jobs, [indeed_job])
         self.assertEqual(warnings, [])
+
+    def test_multi_source_deduplication_ignores_location_formatting(self):
+        indeed_job = {"title": "Data Analyst", "company": "RBC", "location": "Toronto", "url": "https://indeed.test/1", "source": "indeed"}
+        adzuna_duplicate = {"title": "Data Analyst", "company": "RBC", "location": "Toronto, ON", "url": "https://adzuna.test/1", "source": "adzuna"}
+        with patch("src.job_finder.search_indeed", return_value=[indeed_job]), patch("src.job_finder.search_adzuna", return_value=[adzuna_duplicate]):
+            jobs, _ = search_jobs("Data Analyst", app_id="id", app_key="key")
+        self.assertEqual(jobs, [indeed_job])
+
+    def test_job_search_pipeline_creates_one_match_per_canonical_job(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        try:
+            user = User(email="matches@example.com", password_hash="unused")
+            session.add(user); session.flush()
+            automation = Automation(
+                public_id="automation-matches", user_id=user.id, name="Data Analyst",
+                kind="job_search", config_json='{"sources":["indeed","adzuna"]}',
+            )
+            session.add(automation); session.flush()
+            run = AutomationRun(
+                public_id="run-matches", automation_id=automation.id,
+                user_id=user.id, status="running",
+            )
+            session.add(run); session.flush()
+            duplicate_jobs = [
+                {"external_id": "indeed-1", "title": "Data Analyst", "company": "RBC", "location": "Toronto", "url": "https://indeed.test/1", "source": "indeed"},
+                {"external_id": "adzuna-1", "title": "Data Analyst", "company": "RBC", "location": "Toronto, ON", "url": "https://adzuna.test/1", "source": "adzuna"},
+            ]
+            with patch("api.workflows.job_search.search_jobs", return_value=(duplicate_jobs, [])):
+                counts, result = _job_search_pipeline(session, automation, run, user)
+            session.commit()
+            self.assertEqual(session.query(CareerJob).count(), 1)
+            self.assertEqual(session.query(CareerJobMatch).count(), 1)
+            self.assertEqual(len(result["jobs"]), 1)
+            self.assertEqual(counts["duplicates"], 1)
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_job_search_pipeline_skips_provider_listing_older_than_15_days(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        try:
+            user = User(email="fresh-jobs@example.com", password_hash="unused")
+            session.add(user); session.flush()
+            automation = Automation(
+                public_id="automation-fresh", user_id=user.id, name="Engineer",
+                kind="job_search", config_json='{"sources":["indeed"]}',
+            )
+            session.add(automation); session.flush()
+            run = AutomationRun(
+                public_id="run-fresh", automation_id=automation.id,
+                user_id=user.id, status="running",
+            )
+            session.add(run); session.flush()
+            old_job = {
+                "external_id": "old-1", "title": "Old Engineer", "company": "Acme",
+                "url": "https://example.test/old", "source": "indeed",
+                "created": (datetime.utcnow() - timedelta(days=16)).isoformat(),
+            }
+            with patch("api.workflows.job_search.search_jobs", return_value=([old_job], [])):
+                counts, result = _job_search_pipeline(session, automation, run, user)
+            self.assertEqual(counts["found"], 0)
+            self.assertEqual(result["jobs"], [])
+            self.assertEqual(session.query(CareerJob).count(), 0)
+            self.assertIn("older than 15 days", result["source_warnings"][0])
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_retention_deletes_old_discovery_data_but_keeps_application_history(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        now = datetime(2026, 8, 25, 12, 0)
+        try:
+            user = User(email="retention@example.com", password_hash="unused")
+            session.add(user); session.flush()
+            automation = Automation(
+                public_id="automation-retention", user_id=user.id, name="Jobs",
+                kind="job_search", config_json="{}",
+            )
+            session.add(automation); session.flush()
+            old_job = CareerJob(
+                public_id="old-job", user_id=user.id, title="Old", company="Acme",
+                jd_text="large description", source_payload='{"created":"2026-08-01"}',
+                created_at=now - timedelta(days=20),
+            )
+            applied_job = CareerJob(
+                public_id="applied-job", user_id=user.id, title="Applied", company="Beta",
+                jd_text="large applied description", source_payload='{"created":"2026-08-01"}',
+                created_at=now - timedelta(days=20),
+            )
+            fresh_job = CareerJob(
+                public_id="fresh-job", user_id=user.id, title="Fresh", company="Gamma",
+                created_at=now - timedelta(days=15),
+            )
+            session.add_all([old_job, applied_job, fresh_job]); session.flush()
+            history = HistoryRecord(
+                user_id=user.id, timestamp=now.isoformat(), job_title="Applied", company="Beta",
+                required_skills="[]", ats_scores="{}", output_files="[]", status="applied",
+            )
+            session.add(history); session.flush()
+            session.add(CareerApplication(
+                public_id="application-retention", user_id=user.id, job_id=applied_job.id,
+                history_record_id=history.id, status="applied",
+            ))
+            old_run = AutomationRun(
+                public_id="old-run", automation_id=automation.id, user_id=user.id,
+                status="completed", result_json='{"jobs":[{"job_id":"old-job"}]}',
+                created_at=now - timedelta(days=16),
+            )
+            recent_run = AutomationRun(
+                public_id="recent-run", automation_id=automation.id, user_id=user.id,
+                status="completed",
+                result_json='{"jobs":[{"job_id":"old-job"},{"job_id":"applied-job"},{"job_id":"fresh-job"}]}',
+                created_at=now,
+            )
+            session.add_all([old_run, recent_run]); session.flush()
+            session.add_all([
+                CareerJobMatch(public_id="old-match", user_id=user.id, automation_id=automation.id, run_id=old_run.id, job_id=old_job.id),
+                CareerJobMatch(public_id="recent-match", user_id=user.id, automation_id=automation.id, run_id=recent_run.id, job_id=old_job.id),
+            ])
+            session.flush()
+
+            counts = cleanup_expired_jobs(session, user.id, now)
+            session.commit()
+
+            self.assertEqual(counts["jobs_deleted"], 1)
+            self.assertEqual(counts["jobs_compacted"], 1)
+            self.assertEqual(counts["runs_deleted"], 1)
+            self.assertIsNone(session.query(CareerJob).filter_by(public_id="old-job").first())
+            retained = session.query(CareerJob).filter_by(public_id="applied-job").one()
+            self.assertEqual(retained.jd_text, "")
+            self.assertEqual(retained.source_payload, "{}")
+            self.assertIsNotNone(session.query(HistoryRecord).filter_by(id=history.id).first())
+            self.assertIsNotNone(session.query(CareerJob).filter_by(public_id="fresh-job").first())
+            result = json.loads(session.query(AutomationRun).filter_by(public_id="recent-run").one().result_json)
+            self.assertEqual(result["jobs"], [{"job_id": "fresh-job"}])
+        finally:
+            session.close()
+            engine.dispose()
 
     def test_database_parts_encode_password_and_require_ssl(self):
         with patch.dict(os.environ, {

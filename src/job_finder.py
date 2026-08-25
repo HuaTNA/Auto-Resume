@@ -81,7 +81,10 @@ def search_jobs(query: str, location: str = "canada", sources: list[str] | None 
     deduplicated: list[dict] = []
     seen: set[str] = set()
     for job in results:
-        identity = "|".join(_normalize_identity(job.get(key)) for key in ("company", "title", "location"))
+        # Keep this identity aligned with CareerJob's database uniqueness rule.
+        # Location text varies across providers (for example "Toronto" versus
+        # "Toronto, ON"), but the database treats company + title as one job.
+        identity = "|".join(_normalize_identity(job.get(key)) for key in ("company", "title"))
         if identity in seen:
             continue
         seen.add(identity)
