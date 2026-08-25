@@ -15,6 +15,9 @@ from api.database import (
     WorkspaceActivity,
 )
 from api.workflows.scheduling import next_run_at
+from api.workflows.job_retention import (
+    cleanup_expired_jobs, job_is_expired, job_retention_days, parse_job_posted_at,
+)
 from api.limits import enforce_external_api_limit
 from src.ats_scorer import score_resume
 from src.cover_letter import generate_cover_letter
@@ -26,6 +29,8 @@ from src.retriever import retrieve_relevant_content
 
 def execute_automation(db: Session, automation: Automation, user: User,
                        trigger: str = "manual") -> AutomationRun:
+    cleanup_expired_jobs(db, user.id)
+    db.commit()
     run = AutomationRun(
         public_id=str(uuid4()), automation_id=automation.id, user_id=user.id,
         status="running", trigger=trigger, started_at=datetime.utcnow(),
@@ -162,6 +167,12 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
         query=query, location=location, sources=sources, app_id=app_id,
         app_key=app_key, max_results=max_results,
     )
+    retention_now = datetime.utcnow()
+    retained_jobs = [job for job in jobs if not job_is_expired(job, retention_now)]
+    expired_count = len(jobs) - len(retained_jobs)
+    jobs = retained_jobs
+    if expired_count:
+        source_warnings.append(f"Skipped {expired_count} listing(s) older than {job_retention_days()} days")
     profile_row = db.query(Profile).filter(Profile.user_id == user.id).first()
     profile = profile_row.get_data() if profile_row else {}
     client = None
@@ -209,6 +220,7 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
                 location=str(job_data.get("location") or "")[:255],
                 source_url=job_data.get("url"), jd_text=str(job_data.get("description") or ""),
                 source_payload=_dump(job_data), required_skills="[]",
+                posted_at=parse_job_posted_at(job_data.get("created")),
             )
             db.add(job); db.flush(); new_count += 1
         else:

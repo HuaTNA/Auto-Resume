@@ -43,6 +43,7 @@ from api.limits import enforce_external_api_limit
 from api.auth import create_oauth_state, decode_oauth_state
 from api.oauth import PROVIDERS, authorization_url, decrypt_credentials, encrypt_credentials, exchange_code, fetch_provider_items, provider_statuses
 from api.workflows.job_search import ensure_application_for_job, execute_automation, generate_application_materials, run_to_dict
+from api.workflows.job_retention import cleanup_expired_jobs
 from api.workflows.runner import run_due_automations
 from api.workflows.scheduling import next_run_at
 from src.ai_config import get_anthropic_model
@@ -457,6 +458,8 @@ def _automation_dict(row: Automation) -> dict:
 
 @router.get("/automations")
 def list_automations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    cleanup_expired_jobs(db, current_user.id)
+    db.commit()
     automations = db.query(Automation).filter(Automation.user_id == current_user.id).order_by(Automation.updated_at.desc()).all()
     runs = db.query(AutomationRun).filter(AutomationRun.user_id == current_user.id).order_by(AutomationRun.id.desc()).limit(50).all()
     by_id = {row.id: row.public_id for row in automations}

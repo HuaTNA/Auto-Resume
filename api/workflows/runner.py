@@ -6,11 +6,14 @@ from sqlalchemy.orm import Session
 
 from api.database import Automation, User
 from api.workflows.job_search import execute_automation, run_to_dict
+from api.workflows.job_retention import cleanup_expired_jobs
 from api.workflows.scheduling import next_run_at
 
 
 def run_due_automations(db: Session, limit: int = 10) -> list[dict]:
     now = datetime.utcnow()
+    cleanup_expired_jobs(db, now=now)
+    db.commit()
     candidates = db.query(Automation).filter(
         Automation.enabled.is_(True),
         Automation.next_run_at.is_not(None),

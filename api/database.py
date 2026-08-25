@@ -156,6 +156,7 @@ class CareerJob(Base):
     location = Column(String(255), default="", nullable=False)
     source_payload = Column(Text, default="{}", nullable=False)
     jd_text = Column(Text, default="", nullable=False)
+    posted_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -468,6 +469,7 @@ def _ensure_compatible_columns():
             "source": "VARCHAR(64) DEFAULT 'manual' NOT NULL",
             "location": "VARCHAR(255) DEFAULT '' NOT NULL",
             "source_payload": "TEXT DEFAULT '{}' NOT NULL",
+            "posted_at": "TIMESTAMP",
         },
         "career_applications": {
             "approval_status": "VARCHAR(32) DEFAULT 'pending' NOT NULL",
@@ -495,6 +497,10 @@ def _ensure_compatible_columns():
         conn.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_career_jobs_user_source_key "
             "ON career_jobs (user_id, source_key)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_career_jobs_posted_at "
+            "ON career_jobs (posted_at)"
         ))
 
 
