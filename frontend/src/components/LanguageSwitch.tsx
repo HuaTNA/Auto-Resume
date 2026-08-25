@@ -4,9 +4,9 @@ import { useLanguage } from "@/lib/language-context";
 
 export default function LanguageSwitch({ inverse = false }: { inverse?: boolean }) {
   const { language, setLanguage } = useLanguage();
-  const border = "border-[rgba(30,26,20,0.12)]";
-  const muted = inverse ? "text-[#B8A98A]" : "text-[#7A6A50]";
-  const active = inverse ? "bg-[#F5EFE0] text-[#1E1A14]" : "bg-[#1E1A14] text-[#F5EFE0]";
+  const border = "border-[rgba(38,51,47,0.12)]";
+  const muted = inverse ? "text-[#839A90]" : "text-[#52645C]";
+  const active = inverse ? "bg-[#F8FAF8] text-[#26332F]" : "bg-[#26332F] text-[#F8FAF8]";
 
   return (
     <div className={`flex rounded-[6px] border ${border} p-0.5`} role="group" aria-label="Language / 语言">

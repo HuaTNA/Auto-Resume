@@ -264,7 +264,7 @@ export default function ProfilePage() {
     return (
       <>
         <Header eyebrow={{ zh: "职业档案 · 履历", en: "CAREER ARCHIVE · PROFILE" }} title={{ zh: "职业履历", en: "Career profile" }} />
-        <div className="p-12 text-center text-[#9A8468]">Loading profile...</div>
+        <div className="p-12 text-center text-[#64736C]">Loading profile...</div>
       </>
     );
   }
@@ -274,9 +274,9 @@ export default function ProfilePage() {
       <>
         <Header eyebrow={{ zh: "职业档案 · 履历", en: "CAREER ARCHIVE · PROFILE" }} title={{ zh: "职业履历", en: "Career profile" }} />
         <div className="p-12 text-center">
-          <p className="text-[#1E1A14] mb-2">{error}</p>
-          <p className="text-sm text-[#9A8468]">
-            Make sure the API server is running and <code className="bg-[#EBE2CC] px-2 py-0.5 rounded">data/profile.json</code> exists.
+          <p className="text-[#26332F] mb-2">{error}</p>
+          <p className="text-sm text-[#64736C]">
+            Make sure the API server is running and <code className="bg-[#E1EAE5] px-2 py-0.5 rounded">data/profile.json</code> exists.
           </p>
         </div>
       </>
@@ -294,13 +294,13 @@ export default function ProfilePage() {
       <div className="mx-auto w-full max-w-4xl p-4 sm:p-6 lg:p-10">
         {/* Profile summary card */}
         <div className="soft-card mb-8 flex flex-col items-start gap-5 p-6 sm:flex-row sm:items-center sm:gap-6">
-          <div className="size-16 rounded-[6px] bg-[#1E1A14] flex items-center justify-center text-[#F5EFE0] text-2xl font-medium">
+          <div className="size-16 rounded-[6px] bg-[#26332F] flex items-center justify-center text-[#F8FAF8] text-2xl font-medium">
             {personal.name ? personal.name.charAt(0).toUpperCase() : "?"}
           </div>
           <div className="flex-1">
             <h2 className="text-xl font-medium">{personal.name || text("你的姓名", "Your name")}</h2>
-            <p className="text-sm text-[#9A8468]">{personal.email}</p>
-            <div className="flex gap-4 mt-2 text-xs text-[#9A8468]">
+            <p className="text-sm text-[#64736C]">{personal.email}</p>
+            <div className="flex gap-4 mt-2 text-xs text-[#64736C]">
               <span>{experiences.length} experience(s)</span>
               <span>{projects.length} project(s)</span>
               <span>
@@ -321,15 +321,15 @@ export default function ProfilePage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-[rgba(30,26,20,0.12)] mb-6">
+        <div className="flex border-b border-[rgba(38,51,47,0.12)] mb-6">
           {(["personal", "skills", "experience", "projects"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-3 text-sm font-medium border-b -mb-px capitalize transition-colors ${
                 activeTab === tab
-                  ? "border-[#B8A98A] text-[#1E1A14]"
-                  : "border-transparent text-[#9A8468] hover:text-[#7A6A50]"
+                  ? "border-[#839A90] text-[#26332F]"
+                  : "border-transparent text-[#64736C] hover:text-[#52645C]"
               }`}
             >
               {({ personal: text("个人", "Personal"), skills: text("技能", "Skills"), experience: text("经历", "Experience"), projects: text("项目", "Projects") } as const)[tab]}
@@ -339,7 +339,7 @@ export default function ProfilePage() {
 
         {/* Personal Info */}
         {activeTab === "personal" && (
-          <div className="bg-[#F5EFE0] rounded-xl border border-[rgba(30,26,20,0.12)] shadow-[0_2px_10px_rgba(30,26,20,0.07)] p-6">
+          <div className="bg-[#F8FAF8] rounded-xl border border-[rgba(38,51,47,0.12)] shadow-[0_2px_10px_rgba(38,51,47,0.07)] p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label={text("姓名", "Full name")} value={personal.name} onChange={(v) => setPersonal({ ...personal, name: v })} />
               <Field label={text("邮箱", "Email")} value={personal.email} onChange={(v) => setPersonal({ ...personal, email: v })} />
@@ -352,7 +352,7 @@ export default function ProfilePage() {
               <button
                 onClick={handleSavePersonal}
                 disabled={saving === "personal"}
-                className="bg-[#1E1A14] text-[#F5EFE0] px-6 py-2 rounded-lg font-medium text-sm hover:bg-[#1E1A14]/90 disabled:opacity-50 flex items-center gap-2"
+                className="bg-[#26332F] text-[#F8FAF8] px-6 py-2 rounded-lg font-medium text-sm hover:bg-[#26332F]/90 disabled:opacity-50 flex items-center gap-2"
               >
                 {saving === "personal" ? "Saving..." : saving === "saved-personal" ? (
                   <>已保存 · Saved</>
@@ -364,10 +364,10 @@ export default function ProfilePage() {
 
         {/* Skills */}
         {activeTab === "skills" && (
-          <div className="bg-[#F5EFE0] rounded-xl border border-[rgba(30,26,20,0.12)] shadow-[0_2px_10px_rgba(30,26,20,0.07)] p-6">
+          <div className="bg-[#F8FAF8] rounded-xl border border-[rgba(38,51,47,0.12)] shadow-[0_2px_10px_rgba(38,51,47,0.07)] p-6">
             {Object.entries(skills).map(([category, items]) => (
               <div key={category} className="mb-6">
-                <label className="block text-sm font-medium text-[#7A6A50] mb-2 capitalize">
+                <label className="block text-sm font-medium text-[#52645C] mb-2 capitalize">
                   {category.replace(/_/g, " ")}
                 </label>
                 <input
@@ -379,12 +379,12 @@ export default function ProfilePage() {
                       [category]: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
                     })
                   }
-                  className="w-full border border-[rgba(30,26,20,0.12)] rounded-lg px-4 py-2.5 text-sm focus:ring-0"
+                  className="w-full border border-[rgba(38,51,47,0.12)] rounded-lg px-4 py-2.5 text-sm focus:ring-0"
                   placeholder="Comma-separated skills"
                 />
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {items.map((item) => (
-                    <span key={item} className="text-xs bg-[#1E1A14]/10 text-[#1E1A14] px-2 py-0.5 rounded-[6px]">
+                    <span key={item} className="text-xs bg-[#26332F]/10 text-[#26332F] px-2 py-0.5 rounded-[6px]">
                       {item}
                     </span>
                   ))}
@@ -398,7 +398,7 @@ export default function ProfilePage() {
                 const name = prompt("New skill category name (e.g., 'databases'):");
                 if (name) setSkills({ ...skills, [name]: [] });
               }}
-              className="text-sm text-[#1E1A14] font-medium flex items-center gap-1 hover:underline"
+              className="text-sm text-[#26332F] font-medium flex items-center gap-1 hover:underline"
             >
               <span aria-hidden="true">＋</span>
               {text("添加分类", "Add category")}
@@ -408,7 +408,7 @@ export default function ProfilePage() {
               <button
                 onClick={handleSaveSkills}
                 disabled={saving === "skills"}
-                className="bg-[#1E1A14] text-[#F5EFE0] px-6 py-2 rounded-lg font-medium text-sm hover:bg-[#1E1A14]/90 disabled:opacity-50 flex items-center gap-2"
+                className="bg-[#26332F] text-[#F8FAF8] px-6 py-2 rounded-lg font-medium text-sm hover:bg-[#26332F]/90 disabled:opacity-50 flex items-center gap-2"
               >
                 {saving === "skills" ? "Saving..." : saving === "saved-skills" ? (
                   <>已保存 · Saved</>
@@ -422,22 +422,22 @@ export default function ProfilePage() {
         {activeTab === "experience" && (
           <div className="space-y-4">
             {experiences.map((exp) => (
-              <div key={exp.id} className="bg-[#F5EFE0] rounded-xl border border-[rgba(30,26,20,0.12)] shadow-[0_2px_10px_rgba(30,26,20,0.07)] p-6">
+              <div key={exp.id} className="bg-[#F8FAF8] rounded-xl border border-[rgba(38,51,47,0.12)] shadow-[0_2px_10px_rgba(38,51,47,0.07)] p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="font-medium text-lg">{exp.role}</h3>
-                    <p className="text-sm text-[#9A8468]">
+                    <p className="text-sm text-[#64736C]">
                       {exp.company} | {exp.date} | {exp.location}
                     </p>
                     {exp.stack && (
-                      <p className="text-xs text-[#9A8468] mt-1">Stack: {exp.stack}</p>
+                      <p className="text-xs text-[#64736C] mt-1">Stack: {exp.stack}</p>
                     )}
                   </div>
                   <div className="flex gap-3 text-sm">
-                    <button onClick={() => setEditingExperienceId(exp.id)} className="text-[#7A6A50] hover:text-[#1E1A14] hover:underline">
+                    <button onClick={() => setEditingExperienceId(exp.id)} className="text-[#52645C] hover:text-[#26332F] hover:underline">
                       {text("编辑", "Edit")}
                     </button>
-                    <button onClick={() => handleDeleteExperience(exp.id)} className="text-[#9A8468] hover:text-[#1E1A14]" title="Delete experience">
+                    <button onClick={() => handleDeleteExperience(exp.id)} className="text-[#64736C] hover:text-[#26332F]" title="Delete experience">
                       {text("删除", "Delete")}
                     </button>
                   </div>
@@ -455,8 +455,8 @@ export default function ProfilePage() {
                     </div>
                     <BulletEditor bullets={exp.bullets} onChange={(bullets) => setExperiences((items) => items.map((item) => item.id === exp.id ? { ...item, bullets } : item))} />
                     <div className="flex justify-end gap-3">
-                      <button onClick={() => handleCancelExperience(exp.id)} className="px-4 py-2 text-sm text-[#7A6A50] hover:underline">{text("取消", "Cancel")}</button>
-                      <button onClick={() => handleSaveExperience(exp)} disabled={saving === `experience-${exp.id}`} className="rounded-lg bg-[#1E1A14] px-5 py-2 text-sm text-[#F5EFE0] disabled:opacity-50">
+                      <button onClick={() => handleCancelExperience(exp.id)} className="px-4 py-2 text-sm text-[#52645C] hover:underline">{text("取消", "Cancel")}</button>
+                      <button onClick={() => handleSaveExperience(exp)} disabled={saving === `experience-${exp.id}`} className="rounded-lg bg-[#26332F] px-5 py-2 text-sm text-[#F8FAF8] disabled:opacity-50">
                         {saving === `experience-${exp.id}` ? text("保存中…", "Saving…") : text("保存经历", "Save experience")}
                       </button>
                     </div>
@@ -469,7 +469,7 @@ export default function ProfilePage() {
 
             <button
               onClick={handleAddExperience}
-              className="w-full py-4 border border-[rgba(30,26,20,0.12)] rounded-xl text-[#9A8468] hover:bg-[#FDFAF3] hover:text-[#1E1A14] transition-colors flex items-center justify-center gap-2 font-medium"
+              className="w-full py-4 border border-[rgba(38,51,47,0.12)] rounded-xl text-[#64736C] hover:bg-[#FCFDFB] hover:text-[#26332F] transition-colors flex items-center justify-center gap-2 font-medium"
             >
               <span aria-hidden="true">＋</span>
               {text("添加经历", "Add experience")}
@@ -481,22 +481,22 @@ export default function ProfilePage() {
         {activeTab === "projects" && (
           <div className="space-y-4">
             {projects.map((proj) => (
-              <div key={proj.id} className="bg-[#F5EFE0] rounded-xl border border-[rgba(30,26,20,0.12)] shadow-[0_2px_10px_rgba(30,26,20,0.07)] p-6">
+              <div key={proj.id} className="bg-[#F8FAF8] rounded-xl border border-[rgba(38,51,47,0.12)] shadow-[0_2px_10px_rgba(38,51,47,0.07)] p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="font-medium text-lg">{proj.name}</h3>
-                    <p className="text-sm text-[#9A8468]">
+                    <p className="text-sm text-[#64736C]">
                       {proj.role} | {proj.date} | {proj.location}
                     </p>
                     {proj.stack && (
-                      <p className="text-xs text-[#9A8468] mt-1">Stack: {proj.stack}</p>
+                      <p className="text-xs text-[#64736C] mt-1">Stack: {proj.stack}</p>
                     )}
                   </div>
                   <div className="flex gap-3 text-sm">
-                    <button onClick={() => setEditingProjectId(proj.id)} className="text-[#7A6A50] hover:text-[#1E1A14] hover:underline">
+                    <button onClick={() => setEditingProjectId(proj.id)} className="text-[#52645C] hover:text-[#26332F] hover:underline">
                       {text("编辑", "Edit")}
                     </button>
-                    <button onClick={() => handleDeleteProject(proj.id)} className="text-[#9A8468] hover:text-[#1E1A14]" title="Delete project">
+                    <button onClick={() => handleDeleteProject(proj.id)} className="text-[#64736C] hover:text-[#26332F]" title="Delete project">
                       {text("删除", "Delete")}
                     </button>
                   </div>
@@ -514,8 +514,8 @@ export default function ProfilePage() {
                     </div>
                     <BulletEditor bullets={proj.bullets} onChange={(bullets) => setProjects((items) => items.map((item) => item.id === proj.id ? { ...item, bullets } : item))} />
                     <div className="flex justify-end gap-3">
-                      <button onClick={() => handleCancelProject(proj.id)} className="px-4 py-2 text-sm text-[#7A6A50] hover:underline">{text("取消", "Cancel")}</button>
-                      <button onClick={() => handleSaveProject(proj)} disabled={saving === `project-${proj.id}`} className="rounded-lg bg-[#1E1A14] px-5 py-2 text-sm text-[#F5EFE0] disabled:opacity-50">
+                      <button onClick={() => handleCancelProject(proj.id)} className="px-4 py-2 text-sm text-[#52645C] hover:underline">{text("取消", "Cancel")}</button>
+                      <button onClick={() => handleSaveProject(proj)} disabled={saving === `project-${proj.id}`} className="rounded-lg bg-[#26332F] px-5 py-2 text-sm text-[#F8FAF8] disabled:opacity-50">
                         {saving === `project-${proj.id}` ? text("保存中…", "Saving…") : text("保存项目", "Save project")}
                       </button>
                     </div>
@@ -528,7 +528,7 @@ export default function ProfilePage() {
 
             <button
               onClick={handleAddProject}
-              className="w-full py-4 border border-[rgba(30,26,20,0.12)] rounded-xl text-[#9A8468] hover:bg-[#FDFAF3] hover:text-[#1E1A14] transition-colors flex items-center justify-center gap-2 font-medium"
+              className="w-full py-4 border border-[rgba(38,51,47,0.12)] rounded-xl text-[#64736C] hover:bg-[#FCFDFB] hover:text-[#26332F] transition-colors flex items-center justify-center gap-2 font-medium"
             >
               <span aria-hidden="true">＋</span>
               {text("添加项目", "Add project")}
@@ -542,19 +542,19 @@ export default function ProfilePage() {
 
 function BulletList({ bullets }: { bullets: Bullet[] }) {
   if (bullets.length === 0) {
-    return <p className="text-sm italic text-[#9A8468]">No bullets yet. Select Edit to add one.</p>;
+    return <p className="text-sm italic text-[#64736C]">No bullets yet. Select Edit to add one.</p>;
   }
 
   return (
     <div className="space-y-2">
       {bullets.map((bullet) => (
         <div key={bullet.id} className="flex items-start gap-2 text-sm">
-          <span className="mt-1 text-[#1E1A14]">&#8226;</span>
+          <span className="mt-1 text-[#26332F]">&#8226;</span>
           <div className="flex-1">
-            <p className="text-[#7A6A50]">{bullet.text}</p>
+            <p className="text-[#52645C]">{bullet.text}</p>
             <div className="mt-1 flex flex-wrap gap-1">
               {bullet.tags.map((tag) => (
-                <span key={tag} className="rounded bg-[#EBE2CC] px-1.5 py-0.5 text-[10px] text-[#9A8468]">{tag}</span>
+                <span key={tag} className="rounded bg-[#E1EAE5] px-1.5 py-0.5 text-[10px] text-[#64736C]">{tag}</span>
               ))}
             </div>
           </div>
@@ -568,32 +568,32 @@ function BulletEditor({ bullets, onChange }: { bullets: Bullet[]; onChange: (bul
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-[#7A6A50]">Resume bullets</h4>
+        <h4 className="text-sm font-medium text-[#52645C]">Resume bullets</h4>
         <button
           type="button"
           onClick={() => onChange([...bullets, { id: `bullet_${Date.now()}`, text: "", tags: [] }])}
-          className="text-sm text-[#1E1A14] hover:underline"
+          className="text-sm text-[#26332F] hover:underline"
         >
           ＋ Add bullet
         </button>
       </div>
       {bullets.map((bullet) => (
-        <div key={bullet.id} className="rounded-lg border border-[rgba(30,26,20,0.12)] bg-[#FDFAF3] p-3">
+        <div key={bullet.id} className="rounded-lg border border-[rgba(38,51,47,0.12)] bg-[#FCFDFB] p-3">
           <textarea
             value={bullet.text}
             onChange={(event) => onChange(bullets.map((item) => item.id === bullet.id ? { ...item, text: event.target.value } : item))}
             rows={3}
             placeholder="Describe the action, technical approach, and measurable result"
-            className="w-full resize-y rounded-lg border border-[rgba(30,26,20,0.12)] px-3 py-2 text-sm focus:ring-0"
+            className="w-full resize-y rounded-lg border border-[rgba(38,51,47,0.12)] px-3 py-2 text-sm focus:ring-0"
           />
           <div className="mt-2 flex items-center gap-2">
             <input
               value={bullet.tags.join(", ")}
               onChange={(event) => onChange(bullets.map((item) => item.id === bullet.id ? { ...item, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) } : item))}
               placeholder="Tags separated by commas"
-              className="min-w-0 flex-1 rounded-lg border border-[rgba(30,26,20,0.12)] px-3 py-2 text-sm focus:ring-0"
+              className="min-w-0 flex-1 rounded-lg border border-[rgba(38,51,47,0.12)] px-3 py-2 text-sm focus:ring-0"
             />
-            <button type="button" onClick={() => onChange(bullets.filter((item) => item.id !== bullet.id))} className="px-2 text-sm text-[#9A8468] hover:text-[#1E1A14]">
+            <button type="button" onClick={() => onChange(bullets.filter((item) => item.id !== bullet.id))} className="px-2 text-sm text-[#64736C] hover:text-[#26332F]">
               Delete
             </button>
           </div>
@@ -614,12 +614,12 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-[#7A6A50] mb-1">{label}</label>
+      <label className="block text-sm font-medium text-[#52645C] mb-1">{label}</label>
       <input
         type="text"
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-[rgba(30,26,20,0.12)] rounded-lg px-4 py-2.5 text-sm focus:ring-0"
+        className="w-full border border-[rgba(38,51,47,0.12)] rounded-lg px-4 py-2.5 text-sm focus:ring-0"
       />
     </div>
   );

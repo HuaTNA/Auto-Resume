@@ -70,12 +70,12 @@ export default function WorkspaceModulePage({ eyebrow, title, subtitle, icon, st
     <>
       <Header eyebrow={localize(eyebrow)} title={localize(title)} subtitle={localize(subtitle)} action={action ? <Link href={action.href} className="secondary-button">{localize(action.label)}<span aria-hidden="true">→</span></Link> : undefined} />
       <div className="mx-auto w-full max-w-[960px] space-y-8 px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
-        <section className="relative overflow-hidden rounded-[16px] border border-[rgba(30,26,20,0.12)] bg-[#F5EFE0] px-7 py-10 text-[#1E1A14] shadow-[0_2px_10px_rgba(30,26,20,0.07)] sm:px-10 lg:py-14">
+        <section className="relative overflow-hidden rounded-[16px] border border-[rgba(38,51,47,0.12)] bg-[#F8FAF8] px-7 py-10 text-[#26332F] shadow-[0_2px_10px_rgba(38,51,47,0.07)] sm:px-10 lg:py-14">
           <div className="relative max-w-2xl">
-            <span className="flex size-14 items-center justify-center rounded-[6px] border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC]"><BirchIcon name={HERO_ICONS[icon] ?? "tree"} size={34} /></span>
-            <p className="eyebrow mt-8 text-[#7A6A50]">{text("生长中的模块", "Living module")}</p>
+            <span className="flex size-14 items-center justify-center rounded-[6px] border border-[rgba(38,51,47,0.12)] bg-[#E1EAE5]"><BirchIcon name={HERO_ICONS[icon] ?? "tree"} size={34} /></span>
+            <p className="eyebrow mt-8 text-[#52645C]">{text("生长中的模块", "Living module")}</p>
             <h2 className="mt-3 text-3xl font-light leading-[1.55] tracking-[0.1em] sm:text-[38px]">{localize(statement)}</h2>
-            <p className="latin mt-5 max-w-xl text-base font-light italic leading-7 text-[#7A6A50]">{text("工作台中克制的一部分，在不增加噪声的前提下获得深度。", "One measured part of the workspace, designed to gain depth without adding noise.")}</p>
+            <p className="latin mt-5 max-w-xl text-base font-light italic leading-7 text-[#52645C]">{text("工作台中克制的一部分，在不增加噪声的前提下获得深度。", "One measured part of the workspace, designed to gain depth without adding noise.")}</p>
           </div>
           <div className="absolute bottom-8 right-9 hidden lg:block" aria-hidden="true"><BirchIcon name="bark" size={72} className="opacity-10" /></div>
         </section>
@@ -84,22 +84,22 @@ export default function WorkspaceModulePage({ eyebrow, title, subtitle, icon, st
           {features.map((feature, index) => (
             <article key={feature.title} className="soft-card lift-card p-6">
               <div className="flex items-start justify-between gap-4">
-                <span className="flex size-11 items-center justify-center rounded-[6px] bg-[#EBE2CC]"><BirchIcon name={ICONS[index] ?? "leaf"} size={27} /></span>
-                <span className="rounded-[6px] border border-[rgba(30,26,20,0.12)] px-2 py-1 text-[9px] tracking-[0.15em] text-[#7A6A50]">{STATUS_LABELS[feature.status][language]}</span>
+                <span className="flex size-11 items-center justify-center rounded-[6px] bg-[#E1EAE5]"><BirchIcon name={ICONS[index] ?? "leaf"} size={27} /></span>
+                <span className="rounded-[6px] border border-[rgba(38,51,47,0.12)] px-2 py-1 text-[9px] tracking-[0.15em] text-[#52645C]">{STATUS_LABELS[feature.status][language]}</span>
               </div>
-              <h3 className="mt-7 text-base font-normal tracking-[0.12em] text-[#1E1A14]">{localize(feature.title)}</h3>
-              <p className="mt-3 text-sm leading-7 text-[#7A6A50]">{localize(feature.description)}</p>
+              <h3 className="mt-7 text-base font-normal tracking-[0.12em] text-[#26332F]">{localize(feature.title)}</h3>
+              <p className="mt-3 text-sm leading-7 text-[#52645C]">{localize(feature.description)}</p>
             </article>
           ))}
         </section>
 
         <section className="soft-card grid gap-8 p-6 sm:p-8 lg:grid-cols-[0.7fr_1.3fr]">
-          <div><p className="eyebrow text-[#9A8468]">{text("培育路径", "Cultivation path")}</p><h3 className="mt-3 text-xl font-normal tracking-[0.12em]">{text("后续生长", "What grows next")}</h3><p className="mt-4 max-w-sm text-sm leading-7 text-[#7A6A50]">{text("按次序补足能力，让每一项功能都有清楚的位置与边界。", "Add capabilities in sequence so every function has a clear place and boundary.")}</p></div>
+          <div><p className="eyebrow text-[#64736C]">{text("培育路径", "Cultivation path")}</p><h3 className="mt-3 text-xl font-normal tracking-[0.12em]">{text("后续生长", "What grows next")}</h3><p className="mt-4 max-w-sm text-sm leading-7 text-[#52645C]">{text("按次序补足能力，让每一项功能都有清楚的位置与边界。", "Add capabilities in sequence so every function has a clear place and boundary.")}</p></div>
           <div className="grid gap-3 sm:grid-cols-2">
             {nextSteps.map((step, index) => (
-              <div key={step} className="flex items-start gap-3 rounded-[6px] border border-[rgba(30,26,20,0.12)] bg-[#EBE2CC] p-4">
-                <span className="latin text-lg italic text-[#9A8468]">{String(index + 1).padStart(2, "0")}</span>
-                <p className="pt-0.5 text-xs leading-6 text-[#7A6A50]">{localize(step)}</p>
+              <div key={step} className="flex items-start gap-3 rounded-[6px] border border-[rgba(38,51,47,0.12)] bg-[#E1EAE5] p-4">
+                <span className="latin text-lg italic text-[#64736C]">{String(index + 1).padStart(2, "0")}</span>
+                <p className="pt-0.5 text-xs leading-6 text-[#52645C]">{localize(step)}</p>
               </div>
             ))}
           </div>

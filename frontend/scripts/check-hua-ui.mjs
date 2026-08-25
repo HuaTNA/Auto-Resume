@@ -4,9 +4,9 @@ import { extname, join, relative } from "node:path";
 const root = new URL("..", import.meta.url).pathname;
 const scanRoots = [join(root, "src"), join(root, "public", "icons", "birch")];
 const allowedColors = new Set([
-  "#1E1A14", "#E8E1D0", "#F5EFE0", "#FDFAF3",
-  "#EBE2CC", "#B8A98A", "#9A8468", "#7A6A50",
-  "#EDE7D3",
+  "#26332F", "#F1F5F2", "#F8FAF8", "#FCFDFB",
+  "#E1EAE5", "#839A90", "#64736C", "#52645C",
+  "#E8EFEB",
 ]);
 const violations = [];
 

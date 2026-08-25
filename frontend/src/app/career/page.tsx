@@ -80,43 +80,43 @@ export default function CareerPage() {
   return <>
     <Header eyebrow={{ zh: "职业工作区", en: "CAREER WORKSPACE" }} title={{ zh: "职业", en: "Career" }} subtitle={{ zh: "你正在推进的机会、材料与下一步。", en: "The opportunities, materials, and next moves currently in motion." }} action={<Link href="/search" className="primary-button">{text("寻找机会", "Find opportunities")}<span aria-hidden="true">→</span></Link>} />
     <WorkspacePage>
-      <section className="relative overflow-hidden rounded-[14px] bg-[#1E1A14] px-6 py-7 text-[#F5EFE0] shadow-[0_16px_48px_rgba(30,26,20,0.16)] sm:px-8 sm:py-9">
+      <section className="relative overflow-hidden rounded-[14px] bg-[#26332F] px-6 py-7 text-[#F8FAF8] shadow-[0_16px_48px_rgba(38,51,47,0.16)] sm:px-8 sm:py-9">
         <BirchIcon name="branch" size={220} className="pointer-events-none absolute -bottom-20 -right-6 opacity-[0.07] brightness-[4]" />
         <div className="relative grid gap-8 lg:grid-cols-[1.25fr_0.75fr] lg:items-end">
           <div>
-            <p className="latin text-[9px] uppercase tracking-[0.34em] text-[#B8A98A]">Your career · in motion</p>
+            <p className="latin text-[9px] uppercase tracking-[0.34em] text-[#839A90]">Your career · in motion</p>
             <h2 className="latin mt-4 max-w-2xl text-[2rem] font-normal leading-[1.2] tracking-[0.03em] sm:text-[2.55rem]">
               {active.length > 0
                 ? text(`你有 ${active.length} 个机会正在向前推进。`, `${active.length} opportunities are moving forward.`)
                 : text("下一段职业路径，从一个值得的机会开始。", "The next chapter starts with one worthwhile opportunity.")}
             </h2>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-[#B8A98A]">
+            <p className="mt-4 max-w-xl text-sm leading-7 text-[#839A90]">
               {latest
                 ? text(`最近更新：${latest.company} · ${latest.job_title}`, `Latest: ${latest.company} · ${latest.job_title}`)
                 : text("寻找机会、定制材料、跟进申请，并把每一步沉淀进职业档案。", "Discover roles, tailor materials, track applications, and keep every step in your career record.")}
             </p>
             <div className="mt-6 flex flex-wrap gap-2.5">
-              <Link href={nextMove.href} className="inline-flex min-h-10 items-center gap-2 rounded-[6px] bg-[#F5EFE0] px-4 text-xs text-[#1E1A14]"><BirchIcon name={nextMove.icon} size={15} />{nextMove.action}</Link>
-              <Link href="/career/applications" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[rgba(245,239,224,0.24)] bg-[rgba(245,239,224,0.08)] px-4 text-xs text-[#F5EFE0]">{text("申请看板", "Application board")}<span aria-hidden="true">→</span></Link>
+              <Link href={nextMove.href} className="inline-flex min-h-10 items-center gap-2 rounded-[6px] bg-[#F8FAF8] px-4 text-xs text-[#26332F]"><BirchIcon name={nextMove.icon} size={15} />{nextMove.action}</Link>
+              <Link href="/career/applications" className="inline-flex min-h-10 items-center gap-2 rounded-[6px] border border-[rgba(248,250,248,0.24)] bg-[rgba(248,250,248,0.08)] px-4 text-xs text-[#F8FAF8]">{text("申请看板", "Application board")}<span aria-hidden="true">→</span></Link>
             </div>
           </div>
 
-          <div className="rounded-[12px] border border-[rgba(245,239,224,0.15)] bg-[rgba(245,239,224,0.07)] p-4">
-            <p className="latin text-[9px] uppercase tracking-[0.3em] text-[#B8A98A]">Career pulse</p>
-            <div className="mt-4 grid grid-cols-3 divide-x divide-[rgba(245,239,224,0.14)]">
+          <div className="rounded-[12px] border border-[rgba(248,250,248,0.15)] bg-[rgba(248,250,248,0.07)] p-4">
+            <p className="latin text-[9px] uppercase tracking-[0.3em] text-[#839A90]">Career pulse</p>
+            <div className="mt-4 grid grid-cols-3 divide-x divide-[rgba(248,250,248,0.14)]">
               <PulseValue value={loading ? "—" : String(active.length)} label={text("活跃申请", "Active")} />
               <PulseValue value={loading ? "—" : String(interviewCount)} label={text("面试", "Interviews")} />
               <PulseValue value={loading ? "—" : averageMatch == null ? "—" : `${averageMatch}%`} label={text("平均匹配", "Avg match")} />
             </div>
-            <div className="mt-5 h-1 overflow-hidden rounded-[4px] bg-[rgba(245,239,224,0.12)]"><span className="block h-full bg-[#B8A98A]" style={{ width: `${Math.min(100, active.length * 18 + interviewCount * 16)}%` }} /></div>
-            <p className="mt-2 text-[9px] leading-4 text-[#9A8468]">{text("进度来自申请状态与材料记录。", "Pulse reflects application stages and material history.")}</p>
+            <div className="mt-5 h-1 overflow-hidden rounded-[4px] bg-[rgba(248,250,248,0.12)]"><span className="block h-full bg-[#839A90]" style={{ width: `${Math.min(100, active.length * 18 + interviewCount * 16)}%` }} /></div>
+            <p className="mt-2 text-[9px] leading-4 text-[#64736C]">{text("进度来自申请状态与材料记录。", "Pulse reflects application stages and material history.")}</p>
           </div>
         </div>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] p-5 shadow-[0_2px_8px_rgba(30,26,20,0.05)] sm:p-6">
-          <div className="flex items-end justify-between gap-4"><div><p className="latin text-[9px] uppercase tracking-[0.32em] text-[#9A8468]">Application flow</p><h2 className="mt-1 text-lg font-medium tracking-[0.08em]">{text("申请进度", "Application pipeline")}</h2></div><Link href="/career/applications" className="text-xs underline decoration-[#B8A98A] underline-offset-4">{text("查看全部", "View all")} →</Link></div>
+        <section className="rounded-[12px] border border-[rgba(38,51,47,0.10)] bg-[#F8FAF8] p-5 shadow-[0_2px_8px_rgba(38,51,47,0.05)] sm:p-6">
+          <div className="flex items-end justify-between gap-4"><div><p className="latin text-[9px] uppercase tracking-[0.32em] text-[#64736C]">Application flow</p><h2 className="mt-1 text-lg font-medium tracking-[0.08em]">{text("申请进度", "Application pipeline")}</h2></div><Link href="/career/applications" className="text-xs underline decoration-[#839A90] underline-offset-4">{text("查看全部", "View all")} →</Link></div>
           <div className="mt-6 grid grid-cols-4 gap-2">
             {PIPELINE.map((status, index) => {
               const count = records.filter((record) => record.status === status).length;
@@ -126,23 +126,23 @@ export default function CareerPage() {
                 interview: text("面试", "Interview"),
                 offer: "Offer",
               };
-              return <div key={status} className={`relative rounded-[8px] border border-[rgba(30,26,20,0.10)] px-3 py-4 ${index === 2 && count > 0 ? "bg-[#EBE2CC]" : "bg-[rgba(232,225,208,0.38)]"}`}>
-                <p className="latin text-2xl leading-none text-[#1E1A14]">{loading ? "—" : count}</p>
-                <p className="mt-2 text-[9px] leading-4 text-[#7A6A50]">{labels[status]}</p>
-                {index < PIPELINE.length - 1 && <span className="absolute -right-2 top-1/2 z-10 text-[10px] text-[#B8A98A]" aria-hidden="true">→</span>}
+              return <div key={status} className={`relative rounded-[8px] border border-[rgba(38,51,47,0.10)] px-3 py-4 ${index === 2 && count > 0 ? "bg-[#E1EAE5]" : "bg-[rgba(241,245,242,0.38)]"}`}>
+                <p className="latin text-2xl leading-none text-[#26332F]">{loading ? "—" : count}</p>
+                <p className="mt-2 text-[9px] leading-4 text-[#52645C]">{labels[status]}</p>
+                {index < PIPELINE.length - 1 && <span className="absolute -right-2 top-1/2 z-10 text-[10px] text-[#839A90]" aria-hidden="true">→</span>}
               </div>;
             })}
           </div>
-          <p className="mt-5 text-[11px] leading-5 text-[#7A6A50]">{text("让每个机会都有清楚的阶段；当状态变化时，这里会立即反映。", "Every opportunity has a visible stage. This view changes as your applications move forward.")}</p>
+          <p className="mt-5 text-[11px] leading-5 text-[#52645C]">{text("让每个机会都有清楚的阶段；当状态变化时，这里会立即反映。", "Every opportunity has a visible stage. This view changes as your applications move forward.")}</p>
         </section>
 
-        <section className="relative overflow-hidden rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#EBE2CC] p-5 sm:p-6">
+        <section className="relative overflow-hidden rounded-[12px] border border-[rgba(38,51,47,0.10)] bg-[#E1EAE5] p-5 sm:p-6">
           <BirchIcon name={nextMove.icon} size={76} className="absolute -bottom-3 -right-2 opacity-[0.08]" />
           <div className="relative">
-            <p className="latin text-[9px] uppercase tracking-[0.32em] text-[#9A8468]">{nextMove.eyebrow}</p>
+            <p className="latin text-[9px] uppercase tracking-[0.32em] text-[#64736C]">{nextMove.eyebrow}</p>
             <h2 className="mt-3 text-lg font-medium leading-7 tracking-[0.06em]">{nextMove.title}</h2>
-            <p className="mt-3 text-xs leading-6 text-[#7A6A50]">{nextMove.detail}</p>
-            <Link href={nextMove.href} className="secondary-button mt-5 bg-[#F5EFE0]">{nextMove.action}<span aria-hidden="true">→</span></Link>
+            <p className="mt-3 text-xs leading-6 text-[#52645C]">{nextMove.detail}</p>
+            <Link href={nextMove.href} className="secondary-button mt-5 bg-[#F8FAF8]">{nextMove.action}<span aria-hidden="true">→</span></Link>
           </div>
         </section>
       </div>
@@ -158,31 +158,31 @@ export default function CareerPage() {
         </div>
       </Section>
 
-      <Section title={text("最近申请", "Recent applications")} eyebrow={text("继续上次的工作", "Continue where you left off")} action={<Link href="/career/applications" className="text-xs text-[#1E1A14] underline decoration-[#B8A98A] underline-offset-4">{text("申请看板", "Application board")} →</Link>}>
+      <Section title={text("最近申请", "Recent applications")} eyebrow={text("继续上次的工作", "Continue where you left off")} action={<Link href="/career/applications" className="text-xs text-[#26332F] underline decoration-[#839A90] underline-offset-4">{text("申请看板", "Application board")} →</Link>}>
         <ApplicationRecords limit={3} />
       </Section>
 
-      <p className="latin text-center text-[9px] uppercase tracking-[0.26em] text-[#9A8468]">{text("每一次机会，都成为下一次判断的语境", "Every opportunity becomes context for the next decision")}</p>
+      <p className="latin text-center text-[9px] uppercase tracking-[0.26em] text-[#64736C]">{text("每一次机会，都成为下一次判断的语境", "Every opportunity becomes context for the next decision")}</p>
     </WorkspacePage>
   </>;
 }
 
 function PulseValue({ value, label }: { value: string; label: string }) {
-  return <div className="px-3 first:pl-0 last:pr-0"><p className="latin text-[1.65rem] leading-none text-[#F5EFE0]">{value}</p><p className="mt-2 text-[8px] uppercase tracking-[0.14em] text-[#9A8468]">{label}</p></div>;
+  return <div className="px-3 first:pl-0 last:pr-0"><p className="latin text-[1.65rem] leading-none text-[#F8FAF8]">{value}</p><p className="mt-2 text-[8px] uppercase tracking-[0.14em] text-[#64736C]">{label}</p></div>;
 }
 
 function CareerTool({ href, icon, title, detail, meta, tone }: { href: string; icon: BirchIconName; title: string; detail: string; meta: string; tone: "light" | "warm" | "dark" }) {
-  const styles = tone === "dark" ? "border-[#1E1A14] bg-[#1E1A14] text-[#F5EFE0]" : tone === "warm" ? "border-[rgba(30,26,20,0.10)] bg-[#EBE2CC] text-[#1E1A14]" : "border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] text-[#1E1A14]";
+  const styles = tone === "dark" ? "border-[#26332F] bg-[#26332F] text-[#F8FAF8]" : tone === "warm" ? "border-[rgba(38,51,47,0.10)] bg-[#E1EAE5] text-[#26332F]" : "border-[rgba(38,51,47,0.10)] bg-[#F8FAF8] text-[#26332F]";
   return <Link href={href} className={`lift-card group relative min-h-52 overflow-hidden rounded-[12px] border p-5 ${styles}`}>
-    <div className="flex items-start justify-between gap-4"><span className={`flex size-10 items-center justify-center rounded-[6px] ${tone === "dark" ? "bg-[#F5EFE0]" : "bg-[#F5EFE0]"}`}><BirchIcon name={icon} size={23} /></span><span className={`latin text-[8px] uppercase tracking-[0.24em] ${tone === "dark" ? "text-[#B8A98A]" : "text-[#9A8468]"}`}>{meta}</span></div>
+    <div className="flex items-start justify-between gap-4"><span className={`flex size-10 items-center justify-center rounded-[6px] ${tone === "dark" ? "bg-[#F8FAF8]" : "bg-[#F8FAF8]"}`}><BirchIcon name={icon} size={23} /></span><span className={`latin text-[8px] uppercase tracking-[0.24em] ${tone === "dark" ? "text-[#839A90]" : "text-[#64736C]"}`}>{meta}</span></div>
     <h3 className="mt-8 text-base font-medium tracking-[0.08em]">{title}</h3>
-    <p className={`mt-2 text-xs leading-6 ${tone === "dark" ? "text-[#B8A98A]" : "text-[#7A6A50]"}`}>{detail}</p>
-    <span className={`absolute bottom-5 right-5 transition-transform group-hover:translate-x-1 ${tone === "dark" ? "text-[#B8A98A]" : "text-[#9A8468]"}`} aria-hidden="true">→</span>
+    <p className={`mt-2 text-xs leading-6 ${tone === "dark" ? "text-[#839A90]" : "text-[#52645C]"}`}>{detail}</p>
+    <span className={`absolute bottom-5 right-5 transition-transform group-hover:translate-x-1 ${tone === "dark" ? "text-[#839A90]" : "text-[#64736C]"}`} aria-hidden="true">→</span>
   </Link>;
 }
 
 function QuietLink({ href, icon, label, detail }: { href: string; icon: BirchIconName; label: string; detail: string }) {
-  return <Link href={href} className="group flex items-center gap-3 rounded-[8px] border border-[rgba(30,26,20,0.10)] bg-[rgba(245,239,224,0.45)] px-4 py-3 hover:bg-[#F5EFE0]">
-    <BirchIcon name={icon} size={17} /><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{label}</span><span className="mt-0.5 block text-[9px] text-[#9A8468]">{detail}</span></span><span className="text-[#B8A98A] transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+  return <Link href={href} className="group flex items-center gap-3 rounded-[8px] border border-[rgba(38,51,47,0.10)] bg-[rgba(248,250,248,0.45)] px-4 py-3 hover:bg-[#F8FAF8]">
+    <BirchIcon name={icon} size={17} /><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{label}</span><span className="mt-0.5 block text-[9px] text-[#64736C]">{detail}</span></span><span className="text-[#839A90] transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
   </Link>;
 }

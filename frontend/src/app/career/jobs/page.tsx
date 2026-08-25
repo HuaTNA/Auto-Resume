@@ -91,8 +91,8 @@ export default function JobsPage() {
         action={<Link href="/automations" className="primary-button">{text("配置搜索", "Configure search")}</Link>}
       />
       <WorkspacePage>
-        {error && <p className="rounded-[12px] bg-[#EBE2CC] p-4 text-xs">{error}</p>}
-        {warnings.map((warning) => <p key={warning} className="rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#F5EFE0] p-3 text-[10px] text-[#7A6A50]">{text("数据源提示", "Source notice")}: {warning}</p>)}
+        {error && <p className="rounded-[12px] bg-[#E1EAE5] p-4 text-xs">{error}</p>}
+        {warnings.map((warning) => <p key={warning} className="rounded-[12px] border border-[rgba(38,51,47,0.10)] bg-[#F8FAF8] p-3 text-[10px] text-[#52645C]">{text("数据源提示", "Source notice")}: {warning}</p>)}
         <Section
           title={text("搜索结果", "Search results")}
           eyebrow={loading ? "—" : `${jobs.length}`}
@@ -100,7 +100,7 @@ export default function JobsPage() {
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex gap-2">
                 {(["all", "indeed", "adzuna"] as const).map((item) => (
-                  <button key={item} onClick={() => setSource(item)} className={`rounded-[6px] px-3 py-1 text-[10px] capitalize ${source === item ? "bg-[#1E1A14] text-[#F5EFE0]" : "bg-[#EBE2CC] text-[#7A6A50]"}`}>{item}</button>
+                  <button key={item} onClick={() => setSource(item)} className={`rounded-[6px] px-3 py-1 text-[10px] capitalize ${source === item ? "bg-[#26332F] text-[#F8FAF8]" : "bg-[#E1EAE5] text-[#52645C]"}`}>{item}</button>
                 ))}
               </div>
               <button onClick={generateSelected} disabled={selected.length === 0 || generating} className="primary-button min-h-9 px-3 py-1 text-[10px] disabled:opacity-40">
@@ -109,16 +109,16 @@ export default function JobsPage() {
             </div>
           }
         >
-          {progress && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[rgba(30,26,20,0.10)] bg-[#EBE2CC] p-3 text-xs"><span>{progress}</span>{!generating && selected.length === 0 && <Link href="/career/applications" className="underline underline-offset-4">{text("查看申请与材料", "View applications and materials")} →</Link>}</div>}
+          {progress && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[rgba(38,51,47,0.10)] bg-[#E1EAE5] p-3 text-xs"><span>{progress}</span>{!generating && selected.length === 0 && <Link href="/career/applications" className="underline underline-offset-4">{text("查看申请与材料", "View applications and materials")} →</Link>}</div>}
           {loading ? (
-            <div className="grid gap-4 md:grid-cols-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-40 animate-pulse rounded-[16px] bg-[rgba(30,26,20,0.05)]" />)}</div>
+            <div className="grid gap-4 md:grid-cols-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-40 animate-pulse rounded-[16px] bg-[rgba(38,51,47,0.05)]" />)}</div>
           ) : jobs.length === 0 ? (
             <EmptyState icon="leaf" title={text("还没有职位结果", "No job results yet")} description={text("创建并运行一次职位搜索自动化，Indeed 和 Adzuna 结果会显示在这里。", "Create and run a job-search automation to populate results from Indeed and Adzuna.")} action={{ label: text("配置职位搜索", "Configure job search"), href: "/automations" }} />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {jobs.map((job, index) => (
-                <article key={job.job_id || `${job.url}-${index}`} className={`flex flex-col rounded-[16px] border bg-[#F5EFE0] p-5 ${job.job_id && selected.includes(job.job_id) ? "border-[#1E1A14] shadow-[0_0_0_1px_#1E1A14]" : "border-[rgba(30,26,20,0.12)]"}`}>
-                  <label className="mb-3 flex w-fit items-center gap-2 text-[10px] text-[#7A6A50]">
+                <article key={job.job_id || `${job.url}-${index}`} className={`flex flex-col rounded-[16px] border bg-[#F8FAF8] p-5 ${job.job_id && selected.includes(job.job_id) ? "border-[#26332F] shadow-[0_0_0_1px_#26332F]" : "border-[rgba(38,51,47,0.12)]"}`}>
+                  <label className="mb-3 flex w-fit items-center gap-2 text-[10px] text-[#52645C]">
                     <input
                       type="checkbox"
                       checked={Boolean(job.job_id && selected.includes(job.job_id))}
@@ -130,7 +130,7 @@ export default function JobsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-medium">{job.title}</h3>
-                      <p className="mt-1 text-xs text-[#7A6A50]">{job.company} · {job.location}</p>
+                      <p className="mt-1 text-xs text-[#52645C]">{job.company} · {job.location}</p>
                     </div>
                     {job.match_score > 0 && <StatusPill tone="brand">{job.match_score}%</StatusPill>}
                   </div>
@@ -140,8 +140,8 @@ export default function JobsPage() {
                     {job.application_record_id && <StatusPill tone="neutral">Review</StatusPill>}
                     {job.materials_generated && <StatusPill tone="brand">Materials ready</StatusPill>}
                   </div>
-                  {job.match_reason && <p className="mt-3 line-clamp-2 text-[10px] leading-5 text-[#7A6A50]">{job.match_reason}</p>}
-                  {salary(job) && <p className="mt-2 text-[10px] text-[#9A8468]">{salary(job)}</p>}
+                  {job.match_reason && <p className="mt-3 line-clamp-2 text-[10px] leading-5 text-[#52645C]">{job.match_reason}</p>}
+                  {salary(job) && <p className="mt-2 text-[10px] text-[#64736C]">{salary(job)}</p>}
                   <div className="mt-auto pt-5">
                     <a href={job.url} target="_blank" rel="noreferrer" className="secondary-button inline-flex">{text(`在 ${sourceName(job.source)} 查看`, `View on ${sourceName(job.source)}`)} →</a>
                   </div>

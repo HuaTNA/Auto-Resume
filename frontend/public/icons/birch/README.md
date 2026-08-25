@@ -6,8 +6,8 @@ The original download stored all nine icons as inline React SVG elements in `src
 
 ## Palette
 
-- Birch ink: `#1E1A14`
-- Lenticel: `#EBE2CC`
+- Birch ink: `#26332F`
+- Lenticel: `#E1EAE5`
 
 ## Icons
 
