@@ -58,7 +58,10 @@ def cleanup_expired_jobs(db: Session, user_id: int | None = None,
     job_query = db.query(CareerJob)
     if user_id is not None:
         job_query = job_query.filter(CareerJob.user_id == user_id)
-    jobs = job_query.all()
+    # Serialize cleanup for the selected rows. Without this lock, overlapping
+    # serverless requests can both load the same jobs and one transaction can
+    # delete rows while the other still expects to update them.
+    jobs = job_query.with_for_update().all()
 
     # Backfill provider dates for rows created before posted_at was introduced.
     for job in jobs:
@@ -68,6 +71,10 @@ def cleanup_expired_jobs(db: Session, user_id: int | None = None,
             except (TypeError, json.JSONDecodeError):
                 payload = {}
             job.posted_at = parse_job_posted_at(payload.get("created"))
+
+    # Persist backfilled dates before bulk deletion. Otherwise SQLAlchemy may
+    # try to UPDATE dirty CareerJob objects after those rows have been deleted.
+    db.flush()
 
     expired_jobs = [
         job for job in jobs

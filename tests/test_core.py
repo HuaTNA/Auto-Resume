@@ -208,6 +208,12 @@ class CoreTests(unittest.TestCase):
             self.assertIsNotNone(session.query(CareerJob).filter_by(public_id="fresh-job").first())
             result = json.loads(session.query(AutomationRun).filter_by(public_id="recent-run").one().result_json)
             self.assertEqual(result["jobs"], [{"job_id": "fresh-job"}])
+
+            repeated = cleanup_expired_jobs(session, user.id, now)
+            session.commit()
+            self.assertEqual(repeated["jobs_deleted"], 0)
+            self.assertEqual(repeated["jobs_compacted"], 0)
+            self.assertEqual(repeated["runs_deleted"], 0)
         finally:
             session.close()
             engine.dispose()
