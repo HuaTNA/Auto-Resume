@@ -1,6 +1,6 @@
 import os
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -156,6 +156,31 @@ class ApiIntegrationTests(unittest.TestCase):
             headers={"Authorization": "Bearer wrong-secret"},
         )
         self.assertEqual(unauthorized.status_code, 401)
+
+    def test_listing_automations_does_not_run_retention_writes(self):
+        session = self.Session()
+        try:
+            job = CareerJob(
+                public_id="expired-read-only-job",
+                user_id=self._user_id("a@example.com"),
+                title="Expired role",
+                company="Acme",
+                created_at=datetime.utcnow() - timedelta(days=30),
+            )
+            session.add(job)
+            session.commit()
+            job_id = job.id
+        finally:
+            session.close()
+
+        response = self.client_a.get("/api/automations")
+        self.assertEqual(response.status_code, 200, response.text)
+
+        session = self.Session()
+        try:
+            self.assertIsNotNone(session.query(CareerJob).filter(CareerJob.id == job_id).first())
+        finally:
+            session.close()
 
     def test_career_document_version_updates_download_source(self):
         session = self.Session()
