@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "status": "failed",
+  "job": {
+    "title": "Backend Engineer",
+    "company": "Example Systems",
+    "url": "https://jobs.example.test/backend-engineer"
+  },
+  "job_match": {
+    "score": 86,
+    "reason": "The fictional candidate has relevant backend experience.",
+    "source": "job_finder"
+  },
+  "job_analysis": null,
+  "resume_ats": null,
+  "material": {
+    "resume_tex": null,
+    "selected_version": null
+  },
+  "versions": [],
+  "optimization": {
+    "rounds": 0,
+    "max_rounds": 2,
+    "stop_reason": "analyze_jd_failed"
+  },
+  "usage": {
+    "model_calls": 2,
+    "max_model_calls": 11,
+    "estimated_input_tokens": 1800,
+    "max_input_tokens": 120000,
+    "reserved_output_tokens": 4400,
+    "max_output_tokens": 23700
+  },
+  "warnings": [],
+  "errors": [
+    {
+      "stage": "analyze_jd",
+      "type": "RuntimeError",
+      "message": "Fictional AI provider unavailable"
+    }
+  ]
+}

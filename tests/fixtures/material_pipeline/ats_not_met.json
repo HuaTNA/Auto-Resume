@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "status": "completed",
+  "job": {
+    "title": "Data Platform Engineer",
+    "company": "Example Analytics",
+    "url": "https://jobs.example.test/data-platform-engineer"
+  },
+  "job_match": {
+    "score": 84,
+    "reason": "The fictional profile matches the role, with some missing preferred skills.",
+    "source": "job_finder"
+  },
+  "job_analysis": {
+    "job_title": "Data Platform Engineer",
+    "required_skills": ["Python", "SQL"]
+  },
+  "resume_ats": {
+    "overall_score": 79,
+    "keyword_match_score": 76,
+    "relevance_score": 82,
+    "impact_score": 73
+  },
+  "material": {
+    "resume_tex": "\\begin{document}Best grounded fictional version\\end{document}",
+    "selected_version": 3
+  },
+  "versions": [
+    {
+      "version": 1,
+      "optimization_round": 0,
+      "resume_tex": "\\begin{document}Version one\\end{document}",
+      "resume_ats": {"overall_score": 70, "keyword_match_score": 65},
+      "decision": "selected_initial",
+      "improvement": null,
+      "grounding_issues": []
+    },
+    {
+      "version": 2,
+      "optimization_round": 1,
+      "resume_tex": "\\begin{document}Version two\\end{document}",
+      "resume_ats": {"overall_score": 76, "keyword_match_score": 72},
+      "decision": "selected_better",
+      "improvement": 6,
+      "grounding_issues": []
+    },
+    {
+      "version": 3,
+      "optimization_round": 2,
+      "resume_tex": "\\begin{document}Best grounded fictional version\\end{document}",
+      "resume_ats": {"overall_score": 79, "keyword_match_score": 76},
+      "decision": "selected_better",
+      "improvement": 3,
+      "grounding_issues": []
+    }
+  ],
+  "optimization": {
+    "rounds": 2,
+    "max_rounds": 2,
+    "stop_reason": "max_rounds_reached"
+  },
+  "usage": {
+    "model_calls": 8,
+    "max_model_calls": 11,
+    "estimated_input_tokens": 39000,
+    "max_input_tokens": 120000,
+    "reserved_output_tokens": 19700,
+    "max_output_tokens": 23700
+  },
+  "warnings": ["ATS target was not reached within two optimization rounds."],
+  "errors": []
+}
