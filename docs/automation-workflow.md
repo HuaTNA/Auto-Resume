@@ -1,14 +1,16 @@
 # Career automation workflow
 
-The job-search automation is a safe, review-first workflow:
+The job-search automation is a safe, review-first agent workflow:
 
-1. Search Adzuna using the configured query and location.
-2. Rank results against the user's Career Profile when Claude is available.
-3. Deduplicate jobs by provider identity or canonical URL.
-4. Persist job matches and create `suggested` application records above the score threshold.
-5. Optionally generate a limited number of resumes and cover letters.
-6. Notify the user and wait for material approval.
-7. External job submission always remains manual.
+1. Read the user's Career Profile plus a broad career direction.
+2. When Claude is available, plan 1–5 focused job-board queries and an explicit selection strategy.
+3. Search Indeed and Adzuna across those directions while reserving result capacity for every query.
+4. Deduplicate the combined pool and rank it against both the profile and the agent's plan.
+5. Persist job matches and create `suggested` application records above the score threshold.
+6. Optionally generate a limited number of resumes and cover letters.
+7. Notify the user and wait for material approval. External job submission always remains manual.
+
+Each run stores the agent's goal, executed queries, selection strategy, and any fallback warning. If `ANTHROPIC_API_KEY` is unavailable or planning fails, the workflow remains operational with the configured seed query and labels the run as fallback mode. `agent_enabled` and `max_search_queries` can be set in the automation config; new automations enable the agent by default with three queries.
 
 ## Scheduling
 

@@ -11,19 +11,21 @@ from sqlalchemy.orm import Session
 
 from api.database import (
     Automation, AutomationRun, CareerApplication, CareerJob, CareerJobMatch,
-    Document, DocumentVersion, HistoryRecord, Notification, Profile, User,
-    WorkspaceActivity,
+    Document, DocumentVersion, HistoryRecord, Notification, Profile,
+    RecommendationBatch, RecommendationBatchItem, User, WorkspaceActivity,
 )
+from api.workflows.application_agent import digest, ensure_agent
 from api.workflows.scheduling import next_run_at
 from api.workflows.job_retention import (
     cleanup_expired_jobs, job_is_expired, job_retention_days, parse_job_posted_at,
 )
 from api.limits import enforce_external_api_limit
-from src.ats_scorer import score_resume
 from src.cover_letter import generate_cover_letter
-from src.generator import generate_resume
-from src.jd_parser import clean_jd, parse_jd
+from src.career_search_agent import (
+    execute_search_plan, fallback_search_plan, plan_career_search,
+)
 from src.job_finder import rank_jobs, search_jobs
+from src.material_pipeline import run_material_pipeline
 from src.retriever import retrieve_relevant_content
 
 
@@ -82,7 +84,10 @@ def run_to_dict(run: AutomationRun, automation_public_id: str | None = None) -> 
 
 
 def generate_application_materials(db: Session, user: User,
-                                   application: CareerApplication) -> HistoryRecord:
+                                   application: CareerApplication, *,
+                                   target_ats_score: int = 85,
+                                   max_optimization_rounds: int = 2,
+                                   template: str | None = None) -> HistoryRecord:
     job = db.query(CareerJob).filter(CareerJob.id == application.job_id, CareerJob.user_id == user.id).first()
     if not job:
         raise RuntimeError("Job not found")
@@ -95,7 +100,12 @@ def generate_application_materials(db: Session, user: User,
     if history and history.resume_tex:
         return history
     client = anthropic.Anthropic(api_key=api_key)
-    _generate_materials(db, user, job, application, profile, client, history.template if history else "classic")
+    _generate_materials(
+        db, user, job, application, profile, client,
+        template or (history.template if history else "classic"),
+        target_ats_score=target_ats_score,
+        max_optimization_rounds=max_optimization_rounds,
+    )
     _notify(db, user.id, "materials_ready", f"Materials ready for {job.title}",
             f"Review the resume and cover letter for {job.company} before applying.",
             "/career/applications")
@@ -161,10 +171,30 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
     if not sources:
         sources = ["indeed", "adzuna"]
     app_id, app_key = os.environ.get("ADZUNA_APP_ID", "").strip(), os.environ.get("ADZUNA_APP_KEY", "").strip()
-    enforce_external_api_limit(db, user, units=max(1, len(sources)), check_burst=False)
+    profile_row = db.query(Profile).filter(Profile.user_id == user.id).first()
+    profile = profile_row.get_data() if profile_row else {}
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    client = anthropic.Anthropic(api_key=api_key) if api_key else None
 
-    jobs, source_warnings = search_jobs(
-        query=query, location=location, sources=sources, app_id=app_id,
+    agent_enabled = bool(config.get("agent_enabled", True))
+    max_queries = _bounded(config.get("max_search_queries"), 3, 1, 5)
+    plan = fallback_search_plan(query)
+    planning_warning = None
+    if agent_enabled and client is not None:
+        try:
+            plan = plan_career_search(
+                profile, query, location, client, max_queries=max_queries,
+            )
+        except Exception as exc:
+            planning_warning = f"AI search planning unavailable: {type(exc).__name__}"
+    elif agent_enabled:
+        planning_warning = "AI search planning is not configured; using the seed query."
+
+    enforce_external_api_limit(
+        db, user, units=max(1, len(sources) * len(plan.queries)), check_burst=False,
+    )
+    jobs, source_warnings = execute_search_plan(
+        plan, search_jobs, location=location, sources=sources, app_id=app_id,
         app_key=app_key, max_results=max_results,
     )
     retention_now = datetime.utcnow()
@@ -173,14 +203,13 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
     jobs = retained_jobs
     if expired_count:
         source_warnings.append(f"Skipped {expired_count} listing(s) older than {job_retention_days()} days")
-    profile_row = db.query(Profile).filter(Profile.user_id == user.id).first()
-    profile = profile_row.get_data() if profile_row else {}
-    client = None
     ranking_warning = None
-    if jobs and os.environ.get("ANTHROPIC_API_KEY", "").strip():
+    if jobs and client is not None:
         try:
-            client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-            jobs = rank_jobs(jobs, profile, client, top_n=top_n)
+            jobs = rank_jobs(
+                jobs, profile, client, top_n=top_n,
+                search_context=plan.to_dict() if agent_enabled else None,
+            )
         except Exception as exc:
             ranking_warning = f"AI ranking unavailable: {type(exc).__name__}"
             jobs = jobs[:top_n]
@@ -194,6 +223,7 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
 
     new_count = duplicate_count = application_count = material_count = 0
     output_jobs = []
+    digest_entries: list[tuple[CareerJob, CareerApplication]] = []
     processed_job_ids: set[int] = set()
     generation_limit = _bounded(config.get("max_generate"), 1, 0, 3)
     generate_materials = bool(config.get("generate_materials", False))
@@ -281,6 +311,35 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
                        "approval_status": application.approval_status if application else None,
                        "materials_generated": generated or (application is not None and _has_materials(db, application))})
         output_jobs.append(output)
+        if (application and qualifies and
+                application.status in {"suggested", "generated"} and
+                len(digest_entries) < 3):
+            digest_entries.append((job, application))
+
+    recommendation_batch_id = None
+    if digest_entries:
+        batch_key = f"automation-run:{run.public_id}"
+        batch = db.query(RecommendationBatch).filter(
+            RecommendationBatch.user_id == user.id,
+            RecommendationBatch.idempotency_key == batch_key,
+        ).first()
+        if not batch:
+            job_ids = [job.public_id for job, _ in digest_entries]
+            batch = RecommendationBatch(
+                public_id=str(uuid4()), user_id=user.id,
+                idempotency_key=batch_key,
+                request_hash=digest({"job_ids": job_ids}),
+                label=plan.goal, status="ready",
+            )
+            db.add(batch); db.flush()
+            for position, (job, application) in enumerate(digest_entries):
+                ensure_agent(db, application)
+                db.add(RecommendationBatchItem(
+                    public_id=str(uuid4()), batch_id=batch.id, user_id=user.id,
+                    job_id=job.id, application_id=application.id,
+                    position=position,
+                ))
+        recommendation_batch_id = batch.public_id
 
     source_counts = {
         source: sum(1 for job in jobs if job.get("source") == source)
@@ -290,40 +349,80 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
               "applications": application_count, "materials": material_count,
               **{f"source_{source}": count for source, count in source_counts.items()}}
     return counts, {"query": query, "location": location, "jobs": output_jobs,
+                    "recommendation_batch_id": recommendation_batch_id,
                     "sources": sources, "source_warnings": source_warnings,
-                    "ranking_warning": ranking_warning, "approval_required": True}
+                    "ranking_warning": ranking_warning,
+                    "agent": {
+                        "enabled": agent_enabled,
+                        "status": "disabled" if not agent_enabled else ("fallback" if planning_warning else "planned"),
+                        **plan.to_dict(),
+                        "warning": planning_warning,
+                    },
+                    "approval_required": True}
 
 
 def _generate_materials(db: Session, user: User, job: CareerJob,
                         application: CareerApplication, profile: dict,
-                        client: anthropic.Anthropic | None, template: str) -> None:
+                        client: anthropic.Anthropic | None, template: str, *,
+                        target_ats_score: int = 85,
+                        max_optimization_rounds: int = 2) -> None:
     if client is None:
         raise RuntimeError("ANTHROPIC_API_KEY is required for document generation")
     if not profile:
         raise RuntimeError("Career profile is empty")
-    analysis = parse_jd(clean_jd(job.jd_text), client)
+    pipeline = run_material_pipeline(
+        profile,
+        {
+            "title": job.title,
+            "company": job.company,
+            "url": job.source_url or "",
+            "jd_text": job.jd_text,
+            "match_reason": "Ranked career match",
+        },
+        client,
+        job_match_score=application.match_score,
+        job_match_reason="Ranked career match",
+        template_name=template,
+        target_ats_score=target_ats_score,
+        max_optimization_rounds=max_optimization_rounds,
+    )
+    resume = pipeline.get("material", {}).get("resume_tex")
+    analysis = pipeline.get("job_analysis") or {}
+    if not resume or pipeline.get("status") == "failed":
+        errors = pipeline.get("errors") or []
+        detail = errors[-1].get("message") if errors else "Material pipeline failed"
+        raise RuntimeError(str(detail))
     filtered = retrieve_relevant_content(profile, analysis, client, top_k=12)
-    resume = generate_resume(filtered, analysis, client, template_name=template)
-    ats = score_resume(resume, analysis, client)
     cover = generate_cover_letter(filtered, analysis, client)
+    ats = pipeline.get("resume_ats") or {}
     history = db.query(HistoryRecord).filter(HistoryRecord.id == application.history_record_id, HistoryRecord.user_id == user.id).first()
     history.resume_tex, history.cover_letter, history.status = resume, cover, "generated"
     history.required_skills = _dump(analysis.get("required_skills", []))
     history.seniority = analysis.get("seniority", "")
     history.ats_scores = _dump({
-        "overall": ats.get("semantic", {}).get("overall_score"),
-        "keyword_pct": ats.get("keyword_match", {}).get("score"),
-        "relevance": ats.get("semantic", {}).get("relevance_score"),
-        "impact": ats.get("semantic", {}).get("impact_score"),
+        "overall": ats.get("overall_score"),
+        "keyword_pct": ats.get("keyword_match_score"),
+        "relevance": ats.get("relevance_score"),
+        "impact": ats.get("impact_score"),
     })
     application.status, application.approval_status = "generated", "ready"
     job.required_skills = history.required_skills
-    _index_document(db, user.id, history, "resume", resume)
+    _index_document(db, user.id, history, "resume", resume, {
+        "material_pipeline": {
+            "schema_version": pipeline.get("schema_version"),
+            "status": pipeline.get("status"),
+            "selected_version": pipeline.get("material", {}).get("selected_version"),
+            "optimization": pipeline.get("optimization", {}),
+            "usage": pipeline.get("usage", {}),
+            "warnings": pipeline.get("warnings", []),
+            "errors": pipeline.get("errors", []),
+        },
+    })
     _index_document(db, user.id, history, "cover_letter", cover)
 
 
 def _index_document(db: Session, user_id: int, history: HistoryRecord,
-                    kind: str, content: str) -> None:
+                    kind: str, content: str, metadata: dict | None = None) -> None:
     document = db.query(Document).filter(Document.user_id == user_id, Document.source_record_id == history.id, Document.kind == kind).first()
     if document:
         return
@@ -333,7 +432,7 @@ def _index_document(db: Session, user_id: int, history: HistoryRecord,
     db.add(document); db.flush()
     db.add(DocumentVersion(public_id=str(uuid4()), document_id=document.id,
                            user_id=user_id, version_number=1, content=content,
-                           metadata_json=_dump({"automation": True})))
+                           metadata_json=_dump({"automation": True, **(metadata or {})})))
 
 
 def _has_materials(db: Session, application: CareerApplication) -> bool:

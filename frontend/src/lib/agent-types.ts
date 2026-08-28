@@ -34,7 +34,7 @@ export interface SubmissionReceipt {
 
 export interface AgentTimelineEvent {
   id: string;
-  kind: "state" | "answer" | "approval" | "submission" | "safety";
+  kind: "state" | "material" | "answer" | "approval" | "submission" | "safety";
   title: string;
   detail?: string;
   created_at: string;

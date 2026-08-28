@@ -36,6 +36,7 @@ export default function AutomationRunHistory({ runs, text }: Props) {
   const jobs = uniqueJobs(selectedRuns);
   const completed = selectedRuns.filter((run) => run.status === "completed").length;
   const failedRuns = selectedRuns.filter((run) => run.status === "failed");
+  const latestAgent = selectedRuns.find((run) => run.result?.agent)?.result?.agent;
 
   function dateLabel(key: string) {
     const [year, month, day] = key.split("-").map(Number);
@@ -67,9 +68,14 @@ export default function AutomationRunHistory({ runs, text }: Props) {
       </div>
 
       <div className="p-4 sm:p-5">
+        {latestAgent?.enabled && <div className="mb-4 rounded-[10px] border border-[rgba(38,51,47,0.10)] bg-[#E1EAE5] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-medium">{text("Agent 搜索计划", "Agent search plan")}</p><StatusLabel fallback={latestAgent.status === "fallback"} text={text} /></div><p className="mt-2 text-[10px] leading-5 text-[#52645C]">{latestAgent.goal}</p><div className="mt-2 flex flex-wrap gap-1.5">{latestAgent.queries.map((query) => <span key={query} className="rounded-[6px] bg-[#F8FAF8] px-2 py-1 text-[9px] text-[#52645C]">{query}</span>)}</div><p className="mt-2 text-[9px] leading-4 text-[#64736C]">{latestAgent.selection_strategy}</p>{latestAgent.warning && <p className="mt-2 text-[9px] leading-4 text-[#64736C]">{latestAgent.warning}</p>}</div>}
         {jobs.length > 0 ? <AutomationJobsTable jobs={jobs} text={text} /> : <div className="rounded-[10px] border border-[rgba(38,51,47,0.10)] bg-[#FCFDFB] px-5 py-10 text-center text-sm text-[#52645C]">{text("这一天没有职位结果", "No job results for this date")}</div>}
         {failedRuns.length > 0 && <details className="mt-4 rounded-[10px] border border-[rgba(38,51,47,0.10)] bg-[#FCFDFB] px-4 py-3"><summary className="cursor-pointer text-xs text-[#52645C]">{text(`查看 ${failedRuns.length} 条失败详情`, `View ${failedRuns.length} failure details`)}</summary><div className="mt-3 space-y-3">{failedRuns.map((run) => <div key={run.id} className="border-t border-[rgba(38,51,47,0.10)] pt-3 first:border-0 first:pt-0"><p className="text-[10px] text-[#64736C]">{new Date(run.created_at).toLocaleTimeString()} · {run.attempt_count} {text("次尝试", "attempts")}</p><p className="mt-1 max-h-28 overflow-y-auto break-words text-[10px] leading-5 text-[#52645C]">{run.error}</p></div>)}</div></details>}
       </div>
     </div>
   );
+}
+
+function StatusLabel({ fallback, text }: { fallback: boolean; text: (zh: string, en: string) => string }) {
+  return <span className="rounded-[6px] bg-[#F8FAF8] px-2 py-1 text-[9px] text-[#52645C]">{fallback ? text("回退模式", "Fallback") : text("已自主规划", "Planned")}</span>;
 }

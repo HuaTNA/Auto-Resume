@@ -14,9 +14,11 @@ from sqlalchemy.orm import Session
 
 from api.auth import create_access_token, hash_password, verify_password, set_auth_cookie, clear_auth_cookie
 from api.database import (
-    AIConversation, AIMessage, Automation, AutomationRun, CareerApplication, DailyApiUsage, GenerationJob,
+    AIConversation, AIMessage, AnswerLibraryEntry, ApplicationAgent, ApplicationAgentEvent, ApplicationAnswer,
+    ApplicationApproval, Automation, AutomationRun, CareerApplication, DailyApiUsage, GenerationJob,
     CareerJob, CareerJobMatch, Document, DocumentVersion, HistoryRecord,
     Integration, InterviewNote, KnowledgeItem, Notification, Profile, User,
+    RecommendationBatch, RecommendationBatchItem, SubmissionCallbackEvent, SubmissionReceipt,
     WorkspaceActivity, WorkspaceProject, WorkspaceTask, get_db,
 )
 from api.dependencies import get_current_user
@@ -187,6 +189,14 @@ def export_account(current_user: User = Depends(get_current_user), db: Session =
         "notifications": Notification, "conversations": AIConversation, "messages": AIMessage,
         "daily_api_usage": DailyApiUsage,
         "generation_jobs": GenerationJob,
+        "recommendation_batches": RecommendationBatch,
+        "recommendation_batch_items": RecommendationBatchItem,
+        "application_agents": ApplicationAgent,
+        "application_agent_events": ApplicationAgentEvent,
+        "answer_library": AnswerLibraryEntry,
+        "application_answers": ApplicationAnswer,
+        "application_approvals": ApplicationApproval,
+        "submission_receipts": SubmissionReceipt,
     }
     data = {name: [_export_row(row) for row in db.query(model).filter(model.user_id == current_user.id).all()] for name, model in models.items()}
     profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
@@ -199,7 +209,19 @@ def delete_account(data: AccountDeleteInput, response: Response, current_user: U
     if not verify_password(data.password, current_user.password_hash):
         raise HTTPException(status_code=401, detail="Password is incorrect")
     user_id = current_user.id
-    ordered_models = [AIMessage, CareerJobMatch, AutomationRun, Notification, DocumentVersion, InterviewNote, GenerationJob, CareerApplication, AIConversation, Document, WorkspaceActivity, WorkspaceTask, WorkspaceProject, KnowledgeItem, DailyApiUsage, Automation, Integration, CareerJob, HistoryRecord, Profile]
+    receipt_ids = [row[0] for row in db.query(SubmissionReceipt.id).filter(SubmissionReceipt.user_id == user_id).all()]
+    if receipt_ids:
+        db.query(SubmissionCallbackEvent).filter(
+            SubmissionCallbackEvent.receipt_id.in_(receipt_ids)
+        ).delete(synchronize_session=False)
+    ordered_models = [
+        AIMessage, CareerJobMatch, AutomationRun, Notification, DocumentVersion,
+        InterviewNote, GenerationJob, ApplicationAgentEvent, ApplicationAnswer, ApplicationApproval,
+        SubmissionReceipt, RecommendationBatchItem, ApplicationAgent,
+        RecommendationBatch, AnswerLibraryEntry, CareerApplication, AIConversation,
+        Document, WorkspaceActivity, WorkspaceTask, WorkspaceProject, KnowledgeItem,
+        DailyApiUsage, Automation, Integration, CareerJob, HistoryRecord, Profile,
+    ]
     for model in ordered_models:
         db.query(model).filter(model.user_id == user_id).delete(synchronize_session=False)
     db.query(User).filter(User.id == user_id).delete(synchronize_session=False)

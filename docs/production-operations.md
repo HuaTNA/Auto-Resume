@@ -52,6 +52,6 @@ Never synthesize missing approvals or successful receipts during recovery.
 
 ### Callback-secret exposure
 
-Pause OpenClaw, rotate `AGENT_CALLBACK_SECRET` in Railway and OpenClaw together, redeploy both, reject callbacks signed with the old secret, and review callback event IDs for replay/conflict signals.
+Pause OpenClaw, rotate `AGENT_CALLBACK_SECRET`/`AUTO_RESUME_WEBHOOK_SECRET` and `AUTO_RESUME_SERVICE_TOKEN` on their matching services, redeploy both, reject callbacks signed with the old secret, and review callback event IDs for replay/conflict signals.
 
 Rollback is appropriate for regressions without incompatible data changes. Restore is appropriate only for confirmed data loss or corruption. If schema compatibility is uncertain, keep writes paused and involve the backend/data owner; do not improvise a reverse migration.

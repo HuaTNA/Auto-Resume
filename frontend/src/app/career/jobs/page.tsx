@@ -136,6 +136,7 @@ export default function JobsPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <StatusPill tone={job.source === "indeed" ? "success" : "neutral"}>{sourceName(job.source)}</StatusPill>
+                    {job.search_query && <StatusPill tone="neutral">{job.search_query}</StatusPill>}
                     {job.is_new && <StatusPill tone="success">New</StatusPill>}
                     {job.application_record_id && <StatusPill tone="neutral">Review</StatusPill>}
                     {job.materials_generated && <StatusPill tone="brand">Materials ready</StatusPill>}

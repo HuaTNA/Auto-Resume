@@ -28,7 +28,7 @@ Database schema and migration ownership belongs to the backend/data workstream. 
 
 Create a Railway service from the repository root. `railway.json` starts Uvicorn and probes `/api/health`. The Docker image runs as an unprivileged user and includes a container health probe.
 
-Copy names from `deploy/railway.env.example` and store real values only in Railway's encrypted variable store. At minimum configure `DATABASE_URL`, independent `JWT_SECRET` and `AGENT_CALLBACK_SECRET`, exact `CORS_ORIGINS`, secure cookie flags, invite-only registration, and `LOCAL_AUTOMATION_SCHEDULER=false`.
+Copy names from `deploy/railway.env.example` and store real values only in Railway's encrypted variable store. At minimum configure `DATABASE_URL`, independent `JWT_SECRET`, `AGENT_CALLBACK_SECRET`, and `AUTO_RESUME_SERVICE_TOKEN`, exact `CORS_ORIGINS`, secure cookie flags, invite-only registration, and `LOCAL_AUTOMATION_SCHEDULER=false`.
 
 Do not place secrets in build arguments, repository files, screenshots, support tickets, or logs. Keep one API replica until migrations and background-work ownership are explicitly safe for multiple replicas.
 

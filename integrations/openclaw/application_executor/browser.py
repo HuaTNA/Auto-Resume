@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol, Sequence
+
+
+@dataclass(frozen=True)
+class Control:
+    """Serializable browser control description used by every site adapter."""
+
+    locator: str
+    kind: str
+    name: str = ""
+    label: str = ""
+    required: bool = False
+    options: tuple[str, ...] = ()
+
+
+class BrowserPage(Protocol):
+    """Small browser port implementable by OpenClaw, Playwright, or a test fixture."""
+
+    @property
+    def url(self) -> str: ...
+
+    def goto(self, url: str) -> None: ...
+    def content_text(self) -> str: ...
+    def controls(self) -> Sequence[Control]: ...
+    def fill(self, locator: str, value: str) -> None: ...
+    def check(self, locator: str, checked: bool) -> None: ...
+    def select(self, locator: str, value: str) -> None: ...
+    def upload(self, locator: str, path: str) -> None: ...
+    def click(self, locator: str) -> None: ...
+    def wait_for_settled(self) -> None: ...

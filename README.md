@@ -14,7 +14,7 @@ Cloud deployment instructions are in [`docs/cloud-deployment.md`](docs/cloud-dep
 - **ATS Scoring + Auto-Optimization** — Keyword matching + Claude semantic analysis. Iteratively refines the resume (up to 3 rounds) until it meets score thresholds (overall: 80, keyword: 60%, relevance: 80, impact: 80).
 - **Cover Letter Generation** — Produces a tailored 3-4 paragraph cover letter that addresses the JD's technical and soft requirements.
 - **Multiple Templates** — Switch between `classic`, `modern` (blue accents), and `consulting` (conservative) styles.
-- **Job Search** — Search jobs via Adzuna API, ranked by Claude against your profile.
+- **Job Search** — Search Indeed and Adzuna, deduplicate results, and rank jobs against your profile with Claude.
 - **Application History** — Tracks every resume generated: company, role, ATS scores, template, and application status. Expandable detail view with content preview.
 - **PDF Compilation** — Compiles LaTeX resumes and cover letters to PDF via pdflatex, downloadable from both CLI and web UI.
 - **Web UI** — Full-featured Next.js frontend with FastAPI backend: dashboard with stats, generate page with step-by-step progress, job search, template picker, profile management, and file downloads (LaTeX/PDF/TXT).
@@ -225,7 +225,14 @@ api/
   server.py                 # FastAPI backend (REST API)
 frontend/
   src/app/                  # Next.js App Router pages
-    page.tsx                # Dashboard
+    page.tsx                # Personal workspace dashboard
+    career/                 # Career overview, applications, and interview prep
+    projects/page.tsx       # Project workspace
+    tasks/page.tsx          # Task workspace
+    knowledge/page.tsx      # Knowledge workspace
+    documents/page.tsx      # Generated documents and versions
+    automations/page.tsx    # Schedules and run history
+    integrations/page.tsx   # Connected services
     generate/page.tsx       # Generate resume flow
     search/page.tsx         # Job search
     templates/page.tsx      # Template picker
@@ -239,7 +246,7 @@ src/
   ats_scorer.py             # Keyword + semantic ATS scoring
   cover_letter.py           # Cover letter generation
   templates.py              # Multi-template manager
-  job_finder.py             # Job search via Adzuna API
+  job_finder.py             # Indeed and Adzuna job search
   history.py                # Application history tracking
 data/
   template.tex              # Classic LaTeX template
@@ -252,12 +259,12 @@ start.bat                   # One-click launcher (Windows)
 
 ## Tech Stack
 
-- **AI**: Claude API (claude-sonnet-4-20250514) for all NLP operations
+- **AI**: Claude API (`claude-sonnet-4-6` by default, configurable with `ANTHROPIC_MODEL`)
 - **Backend**: FastAPI + Uvicorn
 - **Frontend**: Next.js 16 (App Router) + TypeScript + Tailwind CSS
 - **Resume**: LaTeX templates + pdflatex compilation
-- **Job Search**: Adzuna API (free tier)
-- **Icons**: Material Symbols Outlined
+- **Job Search**: Indeed via JobSpy, with optional Adzuna API results
+- **Icons**: Custom Birch icon set
 
 ## Roadmap
 
@@ -276,4 +283,5 @@ Scheduled career discovery, deduplication, review items, material generation, re
 - [ ] Vertex AI embeddings for better retrieval
 - [ ] LinkedIn profile import
 - [ ] Batch resume generation
-- [ ] Deploy frontend and FastAPI to Vercel with Supabase PostgreSQL
+- [x] Vercel frontend and FastAPI preview deployments with Supabase support
+- [ ] Complete production deployment verification

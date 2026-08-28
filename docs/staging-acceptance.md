@@ -31,6 +31,7 @@ This checklist is staging-ready guidance only. It does not authorize creating cl
 - [ ] Mobile layout works at 390×844 CSS pixels with keyboard navigation and 44px-class touch targets.
 - [ ] Required answers can be supplied without silent reuse from the answer library.
 - [ ] Discord choices map to the same public Agent/application IDs and states shown on mobile.
+- [ ] The bridge service token is configured on both services, and the staging Discord User ID is connected to exactly one Auto-Resume account through provider `discord`.
 - [ ] Approval requires the current optimistic version and content digest.
 - [ ] The confirm panel visibly shows company/role, resume version, ATS score, all answers, and final application domain.
 - [ ] A missing snapshot field disables confirmation.

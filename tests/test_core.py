@@ -9,7 +9,8 @@ from unittest.mock import patch
 from api.auth import create_oauth_state, decode_oauth_state, get_secret_key
 from api.database import (
     Automation, AutomationRun, Base, CareerApplication, CareerJob,
-    CareerJobMatch, HistoryRecord, User, _build_db_url,
+    CareerJobMatch, HistoryRecord, RecommendationBatch,
+    RecommendationBatchItem, User, _build_db_url,
 )
 from api.limits import enforce_external_api_limit
 from api.oauth import decrypt_credentials, encrypt_credentials, provider_statuses
@@ -23,12 +24,48 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.ai_config import DEFAULT_ANTHROPIC_MODEL, get_anthropic_model
 from src.ai_json import AIResponseFormatError, request_json
+from src.career_search_agent import (
+    CareerSearchPlan, execute_search_plan, plan_career_search,
+)
 from src.job_finder import _indeed_country, _indeed_job_key, search_jobs
 from src.pdf_renderer import latex_to_blocks, render_latex_fallback
 from src.templates import list_templates
 
 
 class CoreTests(unittest.TestCase):
+    def test_career_agent_plans_bounded_profile_aware_queries(self):
+        response = SimpleNamespace(content=[SimpleNamespace(text=json.dumps({
+            "goal": "Prioritize entry-level applied AI roles.",
+            "queries": ["Machine Learning Engineer", "Data Scientist", "Machine Learning Engineer", "AI Engineer"],
+            "selection_strategy": "Prefer Python roles with realistic seniority.",
+        }))])
+        client = SimpleNamespace(messages=SimpleNamespace(create=lambda **_: response))
+        plan = plan_career_search(
+            {"skills": {"languages": ["Python"]}, "experiences": [{"role": "ML Intern", "company": "Acme"}]},
+            "Applied AI", "canada", client, max_queries=2,
+        )
+        self.assertEqual(plan.queries, ["Machine Learning Engineer", "Data Scientist"])
+        self.assertIn("entry-level", plan.goal)
+
+    def test_career_agent_executes_queries_and_deduplicates_results(self):
+        calls = []
+
+        def fake_search(**kwargs):
+            calls.append(kwargs["query"])
+            common = {"title": "ML Engineer", "company": "Acme", "url": "https://example.test/common", "source": "indeed"}
+            unique = {"title": f'{kwargs["query"]} Intern', "company": "Beta", "url": f'https://example.test/{len(calls)}', "source": "adzuna"}
+            return [common, unique], []
+
+        plan = CareerSearchPlan("Find AI roles", ["ML Engineer", "AI Engineer"], "Prefer junior roles")
+        jobs, warnings = execute_search_plan(
+            plan, fake_search, location="canada", sources=["indeed"],
+            app_id="", app_key="", max_results=10,
+        )
+        self.assertEqual(calls, ["ML Engineer", "AI Engineer"])
+        self.assertEqual(len(jobs), 3)
+        self.assertEqual(jobs[0]["search_query"], "ML Engineer")
+        self.assertEqual(warnings, [])
+
     def test_vercel_config_registers_daily_automation_cron(self):
         config = (Path(__file__).parent.parent / "vercel.json").read_text(encoding="utf-8")
         self.assertIn('"/api/internal/automations/run-due"', config)
@@ -103,6 +140,45 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(session.query(CareerJobMatch).count(), 1)
             self.assertEqual(len(result["jobs"]), 1)
             self.assertEqual(counts["duplicates"], 1)
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_ranked_job_search_creates_a_discord_recommendation_batch(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        try:
+            user = User(email="digest@example.com", password_hash="unused")
+            session.add(user); session.flush()
+            automation = Automation(
+                public_id="automation-digest", user_id=user.id, name="Platform Engineer",
+                kind="job_search",
+                config_json='{"sources":["indeed"],"agent_enabled":false,"min_match_score":70}',
+            )
+            session.add(automation); session.flush()
+            run = AutomationRun(
+                public_id="run-digest", automation_id=automation.id,
+                user_id=user.id, status="running",
+            )
+            session.add(run); session.flush()
+            job = {
+                "external_id": "digest-1", "title": "Platform Engineer",
+                "company": "Acme", "location": "Toronto",
+                "description": "Build reliable Python platforms",
+                "url": "https://example.test/digest-1", "source": "indeed",
+                "match_score": 90, "match_reason": "Strong platform overlap",
+            }
+            with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=False), \
+                    patch("api.workflows.job_search.search_jobs", return_value=([job], [])), \
+                    patch("api.workflows.job_search.rank_jobs", return_value=[job]):
+                _, result = _job_search_pipeline(session, automation, run, user)
+            session.commit()
+            batch = session.query(RecommendationBatch).one()
+            item = session.query(RecommendationBatchItem).one()
+            self.assertEqual(result["recommendation_batch_id"], batch.public_id)
+            self.assertEqual(item.position, 0)
+            self.assertEqual(batch.idempotency_key, "automation-run:run-digest")
         finally:
             session.close()
             engine.dispose()

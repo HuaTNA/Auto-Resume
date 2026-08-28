@@ -190,7 +190,7 @@ def _normalize_identity(value) -> str:
 
 
 def rank_jobs(jobs: list[dict], profile: dict, client: anthropic.Anthropic,
-              top_n: int = 10) -> list[dict]:
+              top_n: int = 10, search_context: dict | None = None) -> list[dict]:
     """
     Use Claude to rank/score jobs by fit with the candidate's profile.
     Returns top_n jobs sorted by match score.
@@ -198,17 +198,23 @@ def rank_jobs(jobs: list[dict], profile: dict, client: anthropic.Anthropic,
     # Build a concise profile summary for scoring
     skills = profile.get("skills", {})
     all_skills = []
-    for category, items in skills.items():
-        all_skills.extend(items)
+    if isinstance(skills, dict):
+        for items in skills.values():
+            if isinstance(items, list):
+                all_skills.extend(items)
+    elif isinstance(skills, list):
+        all_skills.extend(skills)
 
     exp_summary = []
     for exp in profile.get("experiences", []):
-        exp_summary.append(f"{exp['role']} at {exp['company']}")
+        if isinstance(exp, dict):
+            exp_summary.append(f"{exp.get('role', 'Role')} at {exp.get('company', 'Company')}")
     for proj in profile.get("projects", []):
-        exp_summary.append(f"Project: {proj['name']} ({proj['stack']})")
+        if isinstance(proj, dict):
+            exp_summary.append(f"Project: {proj.get('name', 'Project')} ({proj.get('stack', '')})")
 
     profile_summary = {
-        "education": [e["degree"] for e in profile.get("education", [])],
+        "education": [e.get("degree", "") for e in profile.get("education", []) if isinstance(e, dict)],
         "skills": all_skills,
         "experience": exp_summary,
     }
@@ -228,6 +234,9 @@ def rank_jobs(jobs: list[dict], profile: dict, client: anthropic.Anthropic,
 CANDIDATE PROFILE:
 {json.dumps(profile_summary, indent=2)}
 
+SEARCH PLAN:
+{json.dumps(search_context or {}, indent=2)}
+
 JOBS TO SCORE:
 {json.dumps(jobs_for_scoring, indent=2)}
 
@@ -241,8 +250,9 @@ Return ONLY a JSON array (no markdown, no explanation):
 
 Scoring criteria:
 - Required skills overlap with candidate's skills
-- Experience level match (candidate is a student/intern level)
+- Experience and seniority match based only on the candidate profile
 - Technology stack alignment
+- Alignment with the search plan's goal and selection strategy
 - Role type fit (engineering vs management vs research)"""
 
     response = client.messages.create(

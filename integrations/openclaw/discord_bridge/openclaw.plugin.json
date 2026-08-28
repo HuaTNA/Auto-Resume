@@ -1,0 +1,83 @@
+{
+  "id": "auto-resume-discord-bridge",
+  "name": "Auto Resume Discord Bridge",
+  "description": "Contract-v1 scoped, idempotent Auto Resume recommendation and approval tools for trusted Discord requesters.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "required": [
+      "baseUrl",
+      "serviceToken",
+      "allowedUserIds",
+      "allowedChannelIds"
+    ],
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "format": "uri",
+        "description": "AUTO_RESUME_API_URL"
+      },
+      "serviceToken": {
+        "type": "string",
+        "minLength": 1,
+        "description": "AUTO_RESUME_SERVICE_TOKEN via environment/Secret Store; never expose it."
+      },
+      "allowedUserIds": {
+        "type": "string",
+        "minLength": 15,
+        "description": "DISCORD_ALLOWED_USER_IDS (comma-separated snowflakes)."
+      },
+      "allowedChannelIds": {
+        "type": "string",
+        "minLength": 15,
+        "description": "DISCORD_ALLOWED_CHANNEL_IDS (comma-separated snowflakes)."
+      },
+      "requestTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 30000,
+        "default": 10000
+      }
+    },
+    "additionalProperties": false
+  },
+  "configContracts": {
+    "secretInputs": {
+      "bundledDefaultEnabled": false,
+      "paths": [
+        {
+          "path": "serviceToken",
+          "expected": "string"
+        }
+      ]
+    }
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "auto_resume_discord_command",
+      "auto_resume_bind_discord",
+      "auto_resume_get_latest_digest",
+      "auto_resume_get_digest",
+      "auto_resume_select_recommendation",
+      "auto_resume_decide_approval",
+      "auto_resume_get_status"
+    ]
+  },
+  "toolMetadata": {
+    "auto_resume_discord_command": {
+      "optional": true
+    },
+    "auto_resume_bind_discord": {
+      "optional": true
+    },
+    "auto_resume_select_recommendation": {
+      "optional": true
+    },
+    "auto_resume_decide_approval": {
+      "optional": true
+    }
+  }
+}

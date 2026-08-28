@@ -30,6 +30,7 @@ def enforce_external_api_limit(
     *,
     units: int = 1,
     check_burst: bool = True,
+    commit: bool = True,
 ) -> None:
     """Charge usage before a request reaches Anthropic or Adzuna."""
     units = max(1, min(units, 20))
@@ -65,4 +66,7 @@ def enforce_external_api_limit(
         usage.updated_at = datetime.utcnow()
     else:
         db.add(DailyApiUsage(user_id=user.id, usage_date=usage_date, units=units))
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()

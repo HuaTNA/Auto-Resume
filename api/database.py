@@ -411,6 +411,162 @@ class DailyApiUsage(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class RecommendationBatch(Base):
+    """Immutable, idempotent snapshot of jobs recommended to one user."""
+
+    __tablename__ = "recommendation_batches"
+    __table_args__ = (UniqueConstraint("user_id", "idempotency_key", name="uq_recommendation_batch_user_key"),)
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    idempotency_key = Column(String(128), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    label = Column(String(255), default="", nullable=False)
+    status = Column(String(32), default="ready", nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class RecommendationBatchItem(Base):
+    __tablename__ = "recommendation_batch_items"
+    __table_args__ = (
+        UniqueConstraint("batch_id", "job_id", name="uq_recommendation_batch_job"),
+        UniqueConstraint("batch_id", "position", name="uq_recommendation_batch_position"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    batch_id = Column(Integer, ForeignKey("recommendation_batches.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("career_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id = Column(Integer, ForeignKey("career_applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ApplicationAgent(Base):
+    """Optimistically-versioned state machine for one career application."""
+
+    __tablename__ = "application_agents"
+    __table_args__ = (UniqueConstraint("application_id", name="uq_application_agent_application"),)
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id = Column(Integer, ForeignKey("career_applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    state = Column(String(32), default="discovered", nullable=False, index=True)
+    version = Column(Integer, default=1, nullable=False)
+    material_idempotency_key = Column(String(128), nullable=True)
+    material_request_hash = Column(String(64), nullable=True)
+    last_error_code = Column(String(128), nullable=True)
+    last_error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ApplicationAgentEvent(Base):
+    """Append-only user-visible audit timeline for an Application Agent."""
+
+    __tablename__ = "application_agent_events"
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    agent_id = Column(Integer, ForeignKey("application_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String(32), default="state", nullable=False)
+    title = Column(String(255), nullable=False)
+    detail = Column(Text, default="", nullable=False)
+    from_state = Column(String(32), nullable=True)
+    to_state = Column(String(32), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AnswerLibraryEntry(Base):
+    __tablename__ = "answer_library_entries"
+    __table_args__ = (UniqueConstraint("user_id", "question_key", name="uq_answer_library_user_key"),)
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_key = Column(String(128), nullable=False)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    category = Column(String(64), default="general", nullable=False)
+    reusable = Column(Boolean, default=True, nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ApplicationAnswer(Base):
+    __tablename__ = "application_answers"
+    __table_args__ = (UniqueConstraint("agent_id", "question_key", name="uq_application_answer_agent_key"),)
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    agent_id = Column(Integer, ForeignKey("application_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_key = Column(String(128), nullable=False)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    required = Column(Boolean, default=True, nullable=False)
+    source = Column(String(32), default="user", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ApplicationApproval(Base):
+    __tablename__ = "application_approvals"
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    agent_id = Column(Integer, ForeignKey("application_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(32), default="pending", nullable=False, index=True)
+    content_digest = Column(String(64), nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    requested_note = Column(Text, default="", nullable=False)
+    decision_note = Column(Text, default="", nullable=False)
+    decided_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class SubmissionReceipt(Base):
+    __tablename__ = "submission_receipts"
+    __table_args__ = (UniqueConstraint("user_id", "idempotency_key", name="uq_submission_receipt_user_key"),)
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    agent_id = Column(Integer, ForeignKey("application_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id = Column(Integer, ForeignKey("career_applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    approval_id = Column(Integer, ForeignKey("application_approvals.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    idempotency_key = Column(String(128), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    provider = Column(String(64), nullable=False)
+    status = Column(String(32), default="queued", nullable=False, index=True)
+    external_application_id = Column(String(255), nullable=True)
+    error_code = Column(String(128), nullable=True)
+    error_message = Column(Text, nullable=True)
+    metadata_json = Column(Text, default="{}", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class SubmissionCallbackEvent(Base):
+    __tablename__ = "submission_callback_events"
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(String(128), nullable=False, unique=True, index=True)
+    receipt_id = Column(Integer, ForeignKey("submission_receipts.id", ondelete="CASCADE"), nullable=False, index=True)
+    payload_hash = Column(String(64), nullable=False)
+    payload_json = Column(Text, default="{}", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class GenerationJob(Base):
     """Durable, idempotent state for a complete resume generation run."""
 
@@ -485,6 +641,10 @@ def _ensure_compatible_columns():
             "result_json": "TEXT DEFAULT '{}' NOT NULL",
             "trigger": "VARCHAR(32) DEFAULT 'manual' NOT NULL",
             "attempt_count": "INTEGER DEFAULT 1 NOT NULL",
+        },
+        "application_agents": {
+            "material_idempotency_key": "VARCHAR(128)",
+            "material_request_hash": "VARCHAR(64)",
         },
     }
     inspector = inspect(engine)
