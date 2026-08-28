@@ -9,6 +9,8 @@ data/*.db
 history/
 frontend/node_modules/
 frontend/.next/
+frontend/test-results/
+frontend/playwright-report/
 frontend/.env.local
 deploy/cloud-run.env.yaml
 grep.exe.stackdump

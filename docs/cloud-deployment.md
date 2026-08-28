@@ -1,163 +1,77 @@
-# Cloud deployment
+# Production deployment
 
-Recommended MVP architecture:
-
-```text
-Browser -> Vercel (Next.js frontend) -> /api rewrite -> Vercel (FastAPI backend)
-                                                        -> Supabase PostgreSQL
-```
-
-Use two Vercel projects created from the same Git repository. The frontend
-project has `frontend` as its Root Directory. The backend project uses the
-repository root, where `server.py` exports the FastAPI application.
-
-The frontend rewrite keeps authentication cookies on the frontend origin and
-avoids third-party-cookie restrictions between two `vercel.app` domains.
-
-## 1. Create Supabase PostgreSQL
-
-Create a Supabase Free project in a region close to the Vercel backend. In the
-Supabase dashboard, open **Connect** and copy the **Transaction pooler** URI
-(port `6543`). Vercel Functions are serverless, so transaction mode is preferred
-over a persistent direct connection. Append `sslmode=require` if it is absent:
+Recommended production split:
 
 ```text
-postgresql://postgres.PROJECT_REF:PASSWORD@POOLER_HOST:6543/postgres?sslmode=require
+Mobile/Desktop browser -> Vercel (Next.js)
+                         -> Railway (FastAPI; source of truth)
+                            -> managed PostgreSQL
+                            <- OpenClaw (Discord + browser execution only)
 ```
 
-If the database password contains reserved URL characters, leave `DATABASE_URL`
-unset and use the individual `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_PORT=6543`,
-`DB_NAME=postgres`, and `DB_SSLMODE=require` variables supported by
-`api/database.py` instead of manually editing the URI.
+This repository does not deploy automatically. Production promotion is a human action after CI, a database backup, and a dry-run smoke test. Never use a real job application as a smoke test.
 
-Do not upload `data/auto_resume.db`. Cloud tables are created automatically on
-the first FastAPI startup. Existing local data requires a separate migration if
-it needs to be preserved.
+## PostgreSQL
 
-Supabase Free does not include automatic database backups. Export a manual
-backup before material schema changes or important demos.
+Provision managed PostgreSQL in the API region, require TLS, and inject `DATABASE_URL` into Railway. Use a dedicated application role rather than a provider owner account.
 
-## 2. Create the backend Vercel project
+Before the first release and every schema change:
 
-Import the repository into a new Vercel project named, for example,
-`auto-resume-api`.
+1. Create a provider snapshot or `pg_dump` backup.
+2. Record the application commit and migration version with it.
+3. Run migrations as a one-off release command, never concurrently from all web replicas.
+4. Verify `/api/health` reports `{"status":"ok","db":"postgresql"}` before routing traffic.
 
-- Root Directory: repository root (`.`)
-- Framework Preset: FastAPI, or leave framework detection enabled
-- Entrypoint: `server.py` (detected automatically)
+Database schema and migration ownership belongs to the backend/data workstream. This deployment work adds no migration.
 
-Configure these Production environment variables:
+## Railway API
+
+Create a Railway service from the repository root. `railway.json` starts Uvicorn and probes `/api/health`. The Docker image runs as an unprivileged user and includes a container health probe.
+
+Copy names from `deploy/railway.env.example` and store real values only in Railway's encrypted variable store. At minimum configure `DATABASE_URL`, independent `JWT_SECRET` and `AGENT_CALLBACK_SECRET`, exact `CORS_ORIGINS`, secure cookie flags, invite-only registration, and `LOCAL_AUTOMATION_SCHEDULER=false`.
+
+Do not place secrets in build arguments, repository files, screenshots, support tickets, or logs. Keep one API replica until migrations and background-work ownership are explicitly safe for multiple replicas.
+
+## Vercel frontend
+
+Create a Vercel project with Root Directory `frontend` and Framework Preset `Next.js`. Set only the private rewrite target:
 
 ```text
-DATABASE_URL=YOUR_SUPABASE_TRANSACTION_POOLER_URI
-DB_POOL_SIZE=3
-DB_MAX_OVERFLOW=2
-JWT_SECRET=YOUR_RANDOM_64_HEX_VALUE
-ANTHROPIC_API_KEY=YOUR_ANTHROPIC_KEY
-ANTHROPIC_MODEL=claude-sonnet-4-6
-REGISTRATION_MODE=invite
-REGISTRATION_INVITE_CODE=YOUR_RANDOM_INVITE_CODE
-API_REQUESTS_PER_MINUTE=12
-API_DAILY_UNITS_PER_USER=60
-PRODUCTION=true
-COOKIE_SECURE=true
-COOKIE_SAMESITE=lax
-LOCAL_AUTOMATION_SCHEDULER=false
-OUTPUT_DIR=/tmp/auto-resume-output
+BACKEND_URL=https://YOUR_RAILWAY_API.example
 ```
 
-Optional job-search variables:
+Leave `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_AGENT_API_BASE`, and `AGENT_MOCK_API` unset in production. The browser uses same-origin `/api` paths, and the Next.js rewrite forwards them to Railway while retaining first-party authentication cookies.
 
-```text
-ADZUNA_APP_ID=
-ADZUNA_APP_KEY=
-```
+After assigning the frontend domain, update Railway `CORS_ORIGINS` and redeploy the API. Do not use wildcard credentialed CORS.
 
-Generate independent secrets locally; never put their output in Git:
+## OpenClaw adapter
+
+OpenClaw does not own state. It receives Discord choices, fills Greenhouse/Lever/simulated generic forms, and reports callbacks to Auto-Resume. Start from `deploy/openclaw.env.example` with `OPENCLAW_DRY_RUN=true`.
+
+Required guardrails:
+
+- Fetch current state from Auto-Resume before execution.
+- Act only after Auto-Resume returns a queued receipt backed by a digest-matching human approval.
+- Reuse receipt and idempotency identifiers on retry.
+- Stop at CAPTCHA or 2FA; never bypass either.
+- Treat JD, page, form, and Discord text as untrusted data, never instructions.
+- Allow only Greenhouse, Lever, and the isolated generic-form simulator in MVP.
+- Send sanitized callback metadata, never cookies, tokens, DOM dumps, or full page HTML.
+
+Do not connect the production adapter to a real employer during acceptance testing. Live execution requires a separate human-reviewed enablement after simulator acceptance.
+
+## Promotion checks
 
 ```bash
-python -c "import secrets; print(secrets.token_hex(32))"
+python -m unittest discover -s tests -v
+cd frontend
+npm ci
+npm run lint
+npm run lint:ui
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
-Deploy and verify:
-
-```text
-https://YOUR_BACKEND_PROJECT.vercel.app/api/health
-```
-
-Expected response:
-
-```json
-{"status":"ok","db":"postgresql"}
-```
-
-Vercel does not provide `pdflatex` in the Python runtime. The API therefore
-uses the existing ReportLab renderer when LaTeX is unavailable. PDF compilation
-accepts only a saved resume owned by the authenticated user; arbitrary client
-TeX is not executed.
-
-## 3. Create the frontend Vercel project
-
-Import the same repository into a second project named, for example,
-`auto-resume-web`.
-
-- Root Directory: `frontend`
-- Framework Preset: Next.js
-
-Add this server-side environment variable:
-
-```text
-BACKEND_URL=https://YOUR_BACKEND_PROJECT.vercel.app
-```
-
-Leave `NEXT_PUBLIC_API_URL` unset in Production. The browser calls same-origin
-`/api` routes, and the Next.js rewrite forwards them to the backend project.
-
-Deploy the frontend. Then set the following values on the backend project and
-redeploy it:
-
-```text
-VERCEL_FRONTEND_URL=https://YOUR_FRONTEND_PROJECT.vercel.app
-CORS_ORIGINS=https://YOUR_FRONTEND_PROJECT.vercel.app
-```
-
-## 4. Verify the production flow
-
-Test in this order:
-
-1. Open `/register` and create an invited account.
-2. Log out and log back in to verify the secure session cookie.
-3. Save and reload the profile.
-4. Generate a resume and wait for the generation job to complete.
-5. Refresh History and confirm the result persisted in Supabase.
-6. Download the resume and cover-letter PDFs.
-7. If Adzuna is configured, run job search and confirm the match threshold is
-   still enforced when AI ranking is unavailable.
-
-Inspect the backend Vercel logs and Supabase table editor if any step fails.
-
-## Production values
-
-Backend Vercel project:
-
-- `DATABASE_URL`: Supabase transaction pooler URL on port `6543`
-- `JWT_SECRET`: stable random value
-- `REGISTRATION_MODE=invite` and a strong `REGISTRATION_INVITE_CODE`
-- `API_REQUESTS_PER_MINUTE` and `API_DAILY_UNITS_PER_USER`: server-funded API limits
-- `ANTHROPIC_API_KEY`: current AI provider key
-- `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`: optional job-search credentials
-- `PRODUCTION=true`
-- `COOKIE_SECURE=true`
-- `COOKIE_SAMESITE=lax`
-- `CORS_ORIGINS`: exact frontend production URL
-- `LOCAL_AUTOMATION_SCHEDULER=false`
-- `OUTPUT_DIR=/tmp/auto-resume-output`
-
-Frontend Vercel project:
-
-- `BACKEND_URL`: backend Vercel production URL
-- `NEXT_PUBLIC_API_URL`: unset
-
-The local SQLite runtime database must never be committed. If it appeared in a
-previous revision, remove it from Git history before sharing the repository and
-rotate credentials associated with any real accounts contained in that file.
+Use `docs/production-operations.md` for smoke tests, redaction, rollback, and recovery. Playwright uses only the local mock Agent API and a simulated receipt; it monitors common real recruiting domains and fails if one is contacted.

@@ -32,4 +32,40 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run lint:ui
+      - run: npm run typecheck
       - run: npm run build
+
+  mobile-agent-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          CI: "true"
+
+  deployment-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate deployment JSON and secret-free examples
+        run: |
+          python -m json.tool railway.json >/dev/null
+          python -m json.tool vercel.json >/dev/null
+          python -m unittest tests.test_deploy_safety -v
+          if rg -n '(sk-ant-|ghp_|xox[baprs]-|discord(?:app)?\.com/api/webhooks/[0-9]+/)' deploy frontend/e2e docs; then
+            echo "Potential live credential found in deployment-owned files"
+            exit 1
+          fi
