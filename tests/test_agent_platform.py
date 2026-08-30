@@ -177,8 +177,34 @@ class AgentPlatformApiTests(unittest.TestCase):
                 headers={**headers, "X-Discord-User-Id": "999999999999999999"},
             )
             self.assertEqual(unknown.status_code, 401)
+            disconnected = self.client.delete("/api/integrations/discord")
+            self.assertEqual(disconnected.status_code, 200)
+            revoked = bridge.get(
+                f"/api/agent/recommendation-batches/{batch['id']}", headers=headers,
+            )
+            self.assertEqual(revoked.status_code, 401)
         finally:
             bridge.close()
+
+    def test_discord_binding_validates_id_and_rejects_duplicate_account(self):
+        for invalid in ("tanner2147", "1234", "1" * 23, "１２３４５６７８９０１２３４５", ""):
+            response = self.client.put("/api/integrations/discord", json={"external_account": invalid})
+            self.assertEqual(response.status_code, 400, response.text)
+        discord_id = "123456789012345678"
+        connected = self.client.put("/api/integrations/discord", json={"external_account": f" {discord_id} "})
+        self.assertEqual(connected.status_code, 200, connected.text)
+        self.assertEqual(connected.json()["integration"]["external_account"], discord_id)
+        rows = self.client.get("/api/integrations").json()["integrations"]
+        self.assertEqual(next(row for row in rows if row["provider"] == "discord")["external_account"], discord_id)
+        with TestClient(app) as other:
+            anonymous = other.put("/api/integrations/discord", json={"external_account": discord_id})
+            self.assertEqual(anonymous.status_code, 401)
+            registered = other.post("/api/auth/register", json={"email": "other@example.com", "password": "strong-password"})
+            self.assertEqual(registered.status_code, 200, registered.text)
+            duplicate = other.put("/api/integrations/discord", json={"external_account": discord_id})
+            self.assertEqual(duplicate.status_code, 409)
+            self.assertEqual(other.delete("/api/integrations/discord").status_code, 404)
+        self.assertEqual(self.client.get("/api/integrations").json()["integrations"][0]["external_account"], discord_id)
 
     def test_state_machine_rejects_stale_version_and_missing_materials(self):
         self._seed_job()

@@ -6,6 +6,7 @@ server-backed storage for the cross-workspace modules introduced by the new UI.
 
 import json
 import os
+import re
 from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
@@ -658,6 +659,18 @@ def sync_integration(provider: str, current_user: User = Depends(get_current_use
 def upsert_integration(provider: str, data: IntegrationUpsert, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not provider.replace("-", "").replace("_", "").isalnum(): raise HTTPException(400, "Invalid provider")
     _reject_credentials(data.config)
+    if provider == "discord":
+        data.external_account = (data.external_account or "").strip()
+        if not re.fullmatch(r"[0-9]{15,22}", data.external_account):
+            raise HTTPException(400, "Discord user ID must contain 15–22 digits (not a username).")
+        if data.state == "connected":
+            existing = db.query(Integration).filter(
+                Integration.provider == "discord", Integration.state == "connected",
+                Integration.external_account == data.external_account,
+                Integration.user_id != current_user.id,
+            ).first()
+            if existing:
+                raise HTTPException(409, "This Discord user ID is already bound to another account.")
     row = db.query(Integration).filter(Integration.user_id == current_user.id, Integration.provider == provider).first()
     if not row: row = Integration(public_id=_uuid(), user_id=current_user.id, provider=provider); db.add(row)
     row.state, row.scopes, row.external_account, row.config_json, row.updated_at = data.state, _json_dump(data.scopes), data.external_account, _json_dump(data.config), datetime.utcnow()
