@@ -19,15 +19,31 @@ function idempotencyKey(scope: string) {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers = new Headers(options?.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const response = await fetch(`${apiRoot()}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
+    credentials: "include",
+    headers,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: response.statusText }));
-    const detail = body.detail;
-    throw new Error(typeof detail === "string" ? detail : detail?.message || "Agent request failed");
+    const body = await response.json().catch(() => null);
+    const detail = body?.detail;
+    let message = typeof detail === "string" ? detail : "";
+    if (Array.isArray(detail)) {
+      // FastAPI validation errors include submitted input. Show only field
+      // locations and messages, never input values or arbitrary error context.
+      message = detail.slice(0, 5).map((item) => {
+        const location = Array.isArray(item?.loc)
+          ? item.loc.filter((part: unknown) => typeof part === "string" || typeof part === "number").join(".") : "";
+        const reason = typeof item?.msg === "string" ? item.msg : "Invalid value";
+        return location ? `${location}: ${reason}` : reason;
+      }).join("; ");
+    } else if (detail && typeof detail === "object") {
+      message = typeof detail.message === "string" ? detail.message : "";
+    }
+    const code = typeof detail?.code === "string" && /^[a-z0-9._-]+$/i.test(detail.code) ? ` · ${detail.code}` : "";
+    throw new Error(`${options?.method || "GET"} ${path} — HTTP ${response.status}${code}: ${message || response.statusText || "Request failed"}`);
   }
   return response.json() as Promise<T>;
 }

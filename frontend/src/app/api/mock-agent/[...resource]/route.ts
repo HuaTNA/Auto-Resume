@@ -17,6 +17,13 @@ function enabled() {
   return process.env.NODE_ENV !== "production" && process.env.AGENT_MOCK_API === "true";
 }
 
+function validateJsonHeader(request: NextRequest) {
+  if (request.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+    return NextResponse.json({ detail: [{ loc: ["body"], msg: "Input should be a valid dictionary", type: "model_attributes_type" }] }, { status: 422 });
+  }
+  return null;
+}
+
 function response(application: AgentApplication) {
   return NextResponse.json(application, { headers: { "X-Auto-Resume-Mock": "true", "Cache-Control": "no-store" } });
 }
@@ -40,6 +47,8 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ re
 
 export async function PUT(request: NextRequest, context: { params: Promise<{ resource: string[] }> }) {
   if (!enabled()) return unavailable();
+  const invalidHeader = validateJsonHeader(request);
+  if (invalidHeader) return invalidHeader;
   const resource = (await context.params).resource;
   const application = resource[0] === "agent" && resource[1] === "applications" ? applicationById(resource[2]) : undefined;
   if (!application || resource[3] !== "answers" || !resource[4]) return unavailable();
@@ -56,6 +65,8 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ res
 
 export async function POST(request: NextRequest, context: { params: Promise<{ resource: string[] }> }) {
   if (!enabled()) return unavailable();
+  const invalidHeader = validateJsonHeader(request);
+  if (invalidHeader) return invalidHeader;
   const resource = (await context.params).resource;
   const body = await request.json();
   if (!request.headers.get("Idempotency-Key")) return NextResponse.json({ detail: { code: "agent.idempotency_required", message: "Idempotency-Key is required", retryable: false, context: {} } }, { status: 400 });

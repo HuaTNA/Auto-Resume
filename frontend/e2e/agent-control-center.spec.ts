@@ -21,6 +21,12 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(() => { expect([...contactedRecruitingHosts]).toEqual([]); });
 
 test("answers, requests approval, and records the human decision", async ({ page }) => {
+  const writes: Array<{ path: string; contentType: string; idempotencyKey: string }> = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/mock-agent/") && ["POST", "PUT"].includes(request.method())) {
+      writes.push({ path: new URL(request.url()).pathname, contentType: request.headers()["content-type"], idempotencyKey: request.headers()["idempotency-key"] });
+    }
+  });
   await expect(page.getByTestId("application-state")).toContainText(/待回答|Needs answers/);
   await expect(page.getByTestId("material-pipeline-summary")).toContainText("target_reached");
   await page.getByTestId("answer-input").fill("Yes, I am legally authorized to work in Canada.");
@@ -36,7 +42,31 @@ test("answers, requests approval, and records the human decision", async ({ page
   await page.getByTestId("approve-application").click();
   await expect(page.getByTestId("submission-receipt")).toContainText("queued");
   await expect(page.getByTestId("application-state")).toContainText(/提交中|Submitting/);
+  expect(writes).toHaveLength(4);
+  for (const write of writes) {
+    expect(write.contentType).toBe("application/json");
+    expect(write.idempotencyKey).toBeTruthy();
+  }
+  expect(writes.map((write) => write.path.split("/").at(-1))).toEqual(["work_authorization.ca", "transitions", "decision", "submissions"]);
 });
+
+for (const scenario of [
+  { name: "FastAPI validation array", status: 422, contentType: "application/json", body: JSON.stringify({ detail: [{ loc: ["body", "expected_version"], msg: "Field required", input: "PRIVATE_INPUT_MUST_NOT_APPEAR" }] }), expected: "body.expected_version: Field required" },
+  { name: "structured domain error", status: 409, contentType: "application/json", body: JSON.stringify({ detail: { code: "agent.approval_stale", message: "Approval changed; review again", context: { secret: "PRIVATE_INPUT_MUST_NOT_APPEAR" } } }), expected: "agent.approval_stale: Approval changed; review again" },
+  { name: "non-JSON server error", status: 503, contentType: "text/html", body: "<html>PRIVATE_INPUT_MUST_NOT_APPEAR</html>", expected: "HTTP 503" },
+]) {
+  test(`shows actionable ${scenario.name} without exposing raw input`, async ({ page }) => {
+    await page.route("**/api/mock-agent/career/applications", (route) => route.fulfill(scenario));
+    await page.reload();
+    const alert = page.getByRole("alert").filter({ hasText: "HTTP" });
+    await expect(alert).toContainText(`GET /career/applications — HTTP ${scenario.status}`);
+    await expect(alert).toContainText(scenario.expected);
+    await expect(alert).not.toContainText("PRIVATE_INPUT_MUST_NOT_APPEAR");
+    await page.unroute("**/api/mock-agent/career/applications");
+    await alert.getByRole("button", { name: /重试|Retry/ }).click();
+    await expect(alert).toHaveCount(0);
+  });
+}
 
 test("renders an execution blocker without bypassing CAPTCHA", async ({ page }) => {
   await page.getByRole("button", { name: /Business Systems Analyst/ }).click();
