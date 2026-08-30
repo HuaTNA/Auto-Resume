@@ -45,6 +45,7 @@ class AgentPlatformApiTests(unittest.TestCase):
         names = (
             "REGISTRATION_MODE", "JWT_SECRET", "PRODUCTION",
             "AGENT_CALLBACK_SECRET", "AUTO_RESUME_SERVICE_TOKEN",
+            "ANTHROPIC_API_KEY",
         )
         self.previous_env = {name: os.environ.get(name) for name in names}
         os.environ.update({
@@ -53,6 +54,7 @@ class AgentPlatformApiTests(unittest.TestCase):
             "PRODUCTION": "false",
             "AGENT_CALLBACK_SECRET": "agent-callback-secret-for-tests",
             "AUTO_RESUME_SERVICE_TOKEN": "agent-service-token-for-tests-1234567890",
+            "ANTHROPIC_API_KEY": "",
         })
         self.engine = create_engine(
             "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
@@ -210,17 +212,23 @@ class AgentPlatformApiTests(unittest.TestCase):
         job = {"title": "Junior Engineer", "company": "Test Company", "location": "Toronto",
                "source": "indeed", "url": "https://jobs.example.test/junior", "description": "Python SQL",
                "created": datetime.utcnow().isoformat(), "match_score": 88, "match_reason": "Test fixture"}
-        with patch("api.workflows.job_search.execute_search_plan", return_value=([job], [])) as search, \
-                patch("api.workflows.job_search.rank_jobs", return_value=[job]):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-only-not-a-real-key"}), \
+                patch("api.workflows.job_search.anthropic.Anthropic") as client_factory, \
+                patch("api.workflows.job_search.execute_search_plan", return_value=([job], [])) as search, \
+                patch("api.workflows.job_search.rank_jobs", return_value=[job]) as rank:
             response = self.client.post("/api/agent/searches", json={"query": "Junior Engineer", "location": "Toronto"}, headers={"Idempotency-Key": "discord-search-1"})
             self.assertEqual(response.status_code, 200, response.text)
             result = response.json()
             self.assertEqual(result["status"], "completed", result)
+            self.assertIsNotNone(result["batch"], result)
             self.assertEqual(result["batch"]["items"][0]["job"]["title"], "Junior Engineer")
             self.assertEqual(result["batch"]["items"][0]["agent_state"], "discovered")
             replay = self.client.post("/api/agent/searches", json={"query": "Junior Engineer", "location": "Toronto"}, headers={"Idempotency-Key": "discord-search-1"})
             self.assertEqual(replay.json()["operation_id"], result["operation_id"])
             self.assertEqual(search.call_count, 1)
+            client_factory.assert_called_once_with(api_key="test-only-not-a-real-key")
+            rank.assert_called_once()
+            self.assertIs(rank.call_args.args[2], client_factory.return_value)
             conflict = self.client.post("/api/agent/searches", json={"query": "Different"}, headers={"Idempotency-Key": "discord-search-1"})
             self.assertEqual(conflict.status_code, 409)
         status = self.client.get(f"/api/agent/searches/{result['operation_id']}")
@@ -234,6 +242,24 @@ class AgentPlatformApiTests(unittest.TestCase):
             other.post("/api/auth/register", json={"email": "search-other@example.com", "password": "strong-password"})
             self.assertEqual(other.get(f"/api/agent/searches/{result['operation_id']}").status_code, 404)
             self.assertEqual(other.get("/api/agent/workspace").json()["saved_job_count"], 0)
+
+    def test_discord_search_without_ai_config_does_not_invent_a_recommendation(self):
+        job = {"title": "Junior Engineer", "company": "Test Company", "location": "Toronto",
+               "source": "indeed", "url": "https://jobs.example.test/unranked", "description": "Python",
+               "created": datetime.utcnow().isoformat(), "match_score": 88}
+        with patch("api.workflows.job_search.execute_search_plan", return_value=([job], [])), \
+                patch("api.workflows.job_search.anthropic.Anthropic") as client_factory, \
+                patch("api.workflows.job_search.rank_jobs") as rank:
+            response = self.client.post("/api/agent/searches", json={"query": "Junior Engineer"},
+                                        headers={"Idempotency-Key": "search-without-ai"})
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        self.assertEqual(result["status"], "completed", result)
+        self.assertIsNone(result["batch"])
+        self.assertIn("not configured", result["run"]["result"]["ranking_warning"])
+        self.assertEqual(self.client.get("/api/agent/workspace").json()["saved_job_count"], 1)
+        client_factory.assert_not_called()
+        rank.assert_not_called()
 
     def test_discord_search_failure_remains_visible_and_is_not_reexecuted(self):
         with patch("api.workflows.job_search.execute_search_plan", side_effect=RuntimeError("Search provider offline")) as search:
