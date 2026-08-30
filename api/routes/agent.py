@@ -4,7 +4,7 @@ import hmac
 import json
 import os
 from datetime import datetime
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_URL
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -23,12 +23,15 @@ from api.database import (
     SubmissionCallbackEvent,
     SubmissionReceipt,
     User,
+    Automation,
+    AutomationRun,
     get_db,
 )
 from api.dependencies import get_agent_user
 from api.limits import enforce_external_api_limit
 from api.schemas.agent import (
     AgentState,
+    AgentSearchRequest,
     AgentTransitionRequest,
     AnswerLibraryCreate,
     AnswerLibraryUpdate,
@@ -59,7 +62,7 @@ from api.workflows.application_agent import (
     record_agent_event,
     transition_agent,
 )
-from api.workflows.job_search import ensure_application_for_job, generate_application_materials
+from api.workflows.job_search import ensure_application_for_job, generate_application_materials, execute_automation, run_to_dict
 
 
 router = APIRouter(tags=["application-agent"])
@@ -188,6 +191,76 @@ def get_latest_recommendation_batch(current_user: User = Depends(get_agent_user)
     if not row:
         raise domain_error(404, ErrorCode.NOT_FOUND, "No ready recommendation batch was found.")
     return _batch_dict(db, row)
+
+
+@router.get("/api/agent/workspace")
+def get_agent_workspace(current_user: User = Depends(get_agent_user), db: Session = Depends(get_db)):
+    """Small user-scoped entry point; no credentials or full resume in Discord."""
+    batch = db.query(RecommendationBatch).filter_by(user_id=current_user.id, status="ready").order_by(RecommendationBatch.id.desc()).first()
+    searches = db.query(Automation).filter_by(user_id=current_user.id, kind="job_search", enabled=True).order_by(Automation.id.desc()).limit(10).all()
+    recent = db.query(Automation).filter_by(user_id=current_user.id, kind="job_search").order_by(Automation.id.desc()).limit(5).all()
+    agents = db.query(ApplicationAgent).filter_by(user_id=current_user.id).order_by(ApplicationAgent.updated_at.desc()).limit(10).all()
+    return {
+        "latest_batch": _batch_dict(db, batch) if batch else None,
+        "saved_job_count": db.query(CareerJob).filter_by(user_id=current_user.id).count(),
+        "searches": [{"id": row.public_id, "name": row.name,
+                      "query": json.loads(row.config_json or "{}").get("query", row.name),
+                      "location": json.loads(row.config_json or "{}").get("location", "Toronto"),
+                      "schedule": row.schedule} for row in searches],
+        "applications": [{"id": row.public_id, "state": row.state, "version": row.version} for row in agents],
+        "recent_searches": [{"operation_id": row.public_id, "name": row.name,
+                             "status": _search_operation_dict(db, row)["status"]} for row in recent],
+        "submission_executor_ready": False,
+    }
+
+
+def _search_operation_dict(db: Session, row: Automation) -> dict:
+    run = db.query(AutomationRun).filter_by(automation_id=row.id, user_id=row.user_id).order_by(AutomationRun.id.desc()).first()
+    run_payload = run_to_dict(run, row.public_id) if run else None
+    batch_id = (run_payload or {}).get("result", {}).get("recommendation_batch_id")
+    batch = db.query(RecommendationBatch).filter_by(user_id=row.user_id, public_id=batch_id).first() if batch_id else None
+    return {"operation_id": row.public_id, "status": run.status if run else "interrupted",
+            "run": run_payload, "batch": _batch_dict(db, batch) if batch else None}
+
+
+@router.get("/api/agent/searches/{public_id}")
+def get_agent_search(public_id: str, current_user: User = Depends(get_agent_user), db: Session = Depends(get_db)):
+    row = db.query(Automation).filter_by(user_id=current_user.id, public_id=public_id, kind="job_search").first()
+    if not row:
+        raise domain_error(404, ErrorCode.NOT_FOUND, "Search operation not found.")
+    return _search_operation_dict(db, row)
+
+
+@router.post("/api/agent/searches")
+def start_agent_search(data: AgentSearchRequest,
+                       idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+                       current_user: User = Depends(get_agent_user), db: Session = Depends(get_db)):
+    key = _idempotency_key(idempotency_key)
+    request_hash = digest(_model_dump(data))
+    operation_id = str(uuid5(NAMESPACE_URL, f"auto-resume-search:{current_user.id}:{key}"))
+    row = db.query(Automation).filter_by(user_id=current_user.id, public_id=operation_id).first()
+    if row:
+        if json.loads(row.config_json or "{}").get("request_hash") != request_hash:
+            raise domain_error(409, ErrorCode.IDEMPOTENCY_CONFLICT, "Search key was already used for different parameters.")
+        return _search_operation_dict(db, row)
+    # One-off work is visible on the website but never schedules itself or generates materials.
+    row = Automation(public_id=operation_id, user_id=current_user.id,
+                     name=f"Discord · {data.query.strip()}"[:255], kind="job_search", enabled=False,
+                     schedule="manual", max_retries=0,
+                     config_json=canonical_json({**_model_dump(data), "request_hash": request_hash,
+                                                "agent_enabled": False, "top_n": 3,
+                                                "min_match_score": 60, "generate_materials": False}))
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        row = db.query(Automation).filter_by(user_id=current_user.id, public_id=operation_id).first()
+        if not row or json.loads(row.config_json or "{}").get("request_hash") != request_hash:
+            raise domain_error(409, ErrorCode.IDEMPOTENCY_CONFLICT, "Concurrent search request conflicted.")
+        return _search_operation_dict(db, row)
+    execute_automation(db, row, current_user, trigger="discord")
+    return _search_operation_dict(db, row)
 
 
 @router.get("/api/agent/recommendation-batches/{public_id}")

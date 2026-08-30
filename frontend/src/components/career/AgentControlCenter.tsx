@@ -39,7 +39,8 @@ export default function AgentControlCenter() {
     try {
       const result = await listAgentApplications();
       setApplications(result);
-      setSelectedId((current) => current && result.some((item) => item.id === current) ? current : result[0]?.id ?? null);
+      const linkedAgent = new URLSearchParams(window.location.search).get("agent");
+      setSelectedId((current) => current && result.some((item) => item.id === current) ? current : result.find((item) => item.id === linkedAgent)?.id ?? result[0]?.id ?? null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : text("无法读取 Agent 申请", "Could not load Agent applications"));
     } finally { setLoading(false); }

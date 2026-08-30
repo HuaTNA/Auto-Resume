@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import type { DiscordContext, ParsedCommand } from "./types.js";
 
 function target(command: ParsedCommand): string {
+  if (command.kind === "workspace") return "workspace";
+  if (command.kind === "search") return "search";
+  if (command.kind === "search_status") return `search:${command.operationId}`;
+  if (command.kind === "agent_status") return `agent:${command.agentId}`;
   if (command.kind === "latest_digest") return "latest";
   if ("digestId" in command) return `digest:${command.digestId}`;
   return `approval:${command.approvalId}`;

@@ -86,9 +86,9 @@ export class AutoResumeApiClient {
     this.#timeoutMs = config.requestTimeoutMs ?? 10_000; this.#fetch = fetchImpl;
   }
 
-  async #request(path: string, scope: RequestScope, init: RequestInit = {}): Promise<unknown> {
+  async #request(path: string, scope: RequestScope, init: RequestInit = {}, longRunning = false): Promise<unknown> {
     const response = await this.#fetch(`${this.#baseUrl}${path}`, {
-      ...init, signal: AbortSignal.timeout(this.#timeoutMs),
+      ...init, redirect: "error", signal: AbortSignal.timeout(longRunning ? Math.max(this.#timeoutMs, 240_000) : this.#timeoutMs),
       headers: { Accept: "application/json", Authorization: `Bearer ${this.#serviceToken}`, "Content-Type": "application/json", "Idempotency-Key": scope.idempotencyKey,
         "X-Discord-User-Id": scope.discordUserId, "X-Discord-Channel-Id": scope.discordChannelId,
         "X-Discord-Message-Id": scope.discordMessageId, ...init.headers },
@@ -102,6 +102,20 @@ export class AutoResumeApiClient {
       throw new AgentApiError(code, safe?.retryable === true, response.status, response.headers.get("x-request-id"));
     }
     return response.status === 204 ? {} : response.json();
+  }
+
+  async getWorkspace(scope: RequestScope): Promise<Record<string, unknown>> {
+    return record(await this.#request("/api/agent/workspace", scope));
+  }
+
+  async search(query: string, location: string, scope: RequestScope): Promise<Record<string, unknown>> {
+    return record(await this.#request("/api/agent/searches", scope, {
+      method: "POST", body: JSON.stringify({ query, location, max_results: 15 }),
+    }, true));
+  }
+
+  async getSearch(id: string, scope: RequestScope): Promise<Record<string, unknown>> {
+    return record(await this.#request(`/api/agent/searches/${encodeURIComponent(id)}`, scope));
   }
 
   async getBatch(id: string, scope: RequestScope): Promise<RecommendationBatch> {
@@ -135,7 +149,7 @@ export class AutoResumeApiClient {
     const row = record(await this.#request(API_PATHS.materials(id), scope, {
       method: "POST",
       body: JSON.stringify({ target_ats_score: 85, max_optimization_rounds: 2, template: "classic", generate_cover_letter: true }),
-    }));
+    }, true));
     const result = { agent: agent(row.agent) };
     if (result.agent.id !== id) throw new Error("API materials 响应与请求范围不一致");
     return result;

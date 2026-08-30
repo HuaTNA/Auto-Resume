@@ -6,6 +6,9 @@ This package is the Discord/OpenClaw execution boundary for Application Agent Co
 
 The source of truth is [`docs/agent-platform-contract.md`](../../../docs/agent-platform-contract.md) and [`api/schemas/agent.py`](../../../api/schemas/agent.py). The client uses only:
 
+- `GET /api/agent/workspace`
+- `POST /api/agent/searches`
+- `GET /api/agent/searches/{operation_id}`
 - `GET /api/agent/recommendation-batches/latest`
 - `GET /api/agent/recommendation-batches/{id}`
 - `GET /api/agent/applications/{id}`
@@ -14,6 +17,28 @@ The source of truth is [`docs/agent-platform-contract.md`](../../../docs/agent-p
 - `POST /api/agent/approvals/{id}/decision`
 
 Every request carries the originating Discord message ID and a deterministic `Idempotency-Key`. Every write body and response uses Contract V1 enum values and optimistic versions. No database ID is accepted; command resource IDs must be public UUIDs.
+
+## Website-first routing
+
+For job-search, ATS and application requests, call `auto_resume_get_workspace` first.
+Use `auto_resume_search_jobs` with the user's query/location (or existing website
+preferences) to run the website pipeline. Jobs, matches, the run log and A/B/C batch
+are stored under the bound website account. One-off searches are disabled/manual
+automations; they do not silently create a recurring schedule or generate materials.
+After a timeout, inspect `recent_searches` then call `auto_resume_get_search_status`;
+do not start a fresh search automatically. Failed requests retain their failure state.
+
+Selection uses the exact batch ID already shown to the user; never resolve an old
+"A" against a newer batch. `auto_resume_select_recommendation` prepares bounded ATS
+materials, then returns a mobile review link. `auto_resume_get_application_status`
+reads the saved state. Set optional `webUrl` to the public frontend origin.
+Search/material operations allow up to 240 seconds; all other calls retain the
+configured short timeout. Bearer credentials are never forwarded through redirects.
+
+The production browser submission worker is **not connected**. Approval is not
+submission, a queued receipt is not success, and the bridge must report this gap
+explicitly rather than claim a full autonomous submission loop. Do not manufacture
+confirmation IDs or callbacks. Local executor fixtures remain dry-run only.
 
 Contract V1 has no direct `GET approval` endpoint. Therefore:
 

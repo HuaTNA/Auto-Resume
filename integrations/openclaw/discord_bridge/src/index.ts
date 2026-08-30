@@ -14,18 +14,20 @@ const messageContext = {
 
 const configSchema = Type.Object({
   baseUrl: Type.String({ format: "uri", description: "AUTO_RESUME_API_URL" }),
+  webUrl: Type.Optional(Type.String({ format: "uri", description: "Public frontend URL for mobile review links" })),
   serviceToken: Type.String({ minLength: 1, description: "AUTO_RESUME_SERVICE_TOKEN via environment/Secret Store; never expose it." }),
   allowedUserIds: Type.String({ minLength: 15, description: "DISCORD_ALLOWED_USER_IDS (comma-separated snowflakes)." }),
   allowedChannelIds: Type.String({ minLength: 15, description: "DISCORD_ALLOWED_CHANNEL_IDS (comma-separated snowflakes)." }),
   requestTimeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 30000, default: 10000 })),
 }, { additionalProperties: false });
 
-const resultSchema = Type.Object({ ok: Type.Literal(true), targetType: Type.Union([Type.Literal("digest"), Type.Literal("approval")]), targetId: Type.String({ pattern: UUID }), message: Type.String() }, { additionalProperties: false });
+const resultSchema = Type.Object({ ok: Type.Literal(true), targetType: Type.Union([Type.Literal("digest"), Type.Literal("approval"), Type.Literal("workspace"), Type.Literal("search"), Type.Literal("agent")]), targetId: Type.String(), message: Type.String() }, { additionalProperties: false });
 
 function createBridge(config: any): DiscordBridge {
   return new DiscordBridge(
     new AutoResumeApiClient({ baseUrl: config.baseUrl, serviceToken: config.serviceToken, requestTimeoutMs: config.requestTimeoutMs }),
     { allowedUserIds: parseSnowflakeAllowlist(config.allowedUserIds, "DISCORD_ALLOWED_USER_IDS"), allowedChannelIds: parseSnowflakeAllowlist(config.allowedChannelIds, "DISCORD_ALLOWED_CHANNEL_IDS") },
+    config.webUrl,
   );
 }
 
@@ -51,6 +53,22 @@ export default defineToolPlugin({
     });
 
     return [
+      bound({ name: "auto_resume_get_workspace", label: "Read my job-search website",
+        description: "FIRST tool for any request about my jobs, recommendations, resumes, ATS, or application status. Reads the bound user's Auto-Resume website, saved-job count, search preferences and latest batch. Do not substitute web_search or claim website access without this tool succeeding.",
+        parameters: Type.Object({ ...messageContext }, { additionalProperties: false }), outputSchema: resultSchema },
+      () => ({ kind: "workspace" })),
+      bound({ name: "auto_resume_search_jobs", label: "Search and save jobs on my website", optional: true,
+        description: "Run the website's job search and ranking pipeline, persist jobs and A/B/C recommendations for mobile review. Use the user's stated search query/location or configured website preferences. Does not generate materials or submit applications. Can take up to four minutes; never repeat after a timeout without checking website status.",
+        parameters: Type.Object({ ...messageContext, query: Type.String({ minLength: 1, maxLength: 255 }), location: Type.String({ minLength: 1, maxLength: 255 }) }, { additionalProperties: false }), outputSchema: resultSchema },
+      (params) => ({ kind: "search", query: params.query, location: params.location })),
+      bound({ name: "auto_resume_get_search_status", label: "Check website job search",
+        description: "Read a previously started website search operation without running a second search.",
+        parameters: Type.Object({ ...messageContext, operationId: Type.String({ pattern: UUID }) }, { additionalProperties: false }), outputSchema: resultSchema },
+      (params) => ({ kind: "search_status", operationId: params.operationId })),
+      bound({ name: "auto_resume_get_application_status", label: "Read ATS and application status",
+        description: "Read the exact website application state, ATS result and receipt. queued is not submitted; only a verified succeeded receipt means submitted.",
+        parameters: Type.Object({ ...messageContext, agentId: Type.String({ pattern: UUID }) }, { additionalProperties: false }), outputSchema: resultSchema },
+      (params) => ({ kind: "agent_status", agentId: params.agentId })),
       bound({ name: "auto_resume_discord_command", label: "Run Discord command", optional: true,
         description: "Parse a Chinese command that names an exact digest or approval public UUID.",
         parameters: Type.Object({ ...messageContext, command: Type.String({ minLength: 1, maxLength: 2200 }) }, { additionalProperties: false }), outputSchema: resultSchema },

@@ -32,6 +32,41 @@ async function mockServer(handler) {
 
 function client(baseUrl) { return new AutoResumeApiClient({ baseUrl, serviceToken: "fake-test-service-token" }); }
 
+test("website-first workspace and search persist a batch before rendering A/B/C", async (t) => {
+  const mock = await mockServer(async (call) => {
+    if (call.url.endsWith("/workspace")) return { body: { saved_job_count: 0, latest_batch: null, searches: [], applications: [] } };
+    if (call.url === "/api/agent/searches") return { body: { operation_id: APP, status: "completed", batch: { id: DIGEST }, run: { counts: { found: 1 }, result: { source_warnings: [] } } } };
+    return { body: batch };
+  }); t.after(mock.close);
+  const bridge = new DiscordBridge(client(mock.baseUrl), allowlist, "https://website.example.test");
+  const workspace = await bridge.execute({ kind: "workspace" }, IDS);
+  assert.match(workspace.message, /网站还没有推荐批次/);
+  const searched = await bridge.execute({ kind: "search", query: "Junior Engineer", location: "Toronto" }, IDS);
+  assert.deepEqual(mock.calls[1].body, { query: "Junior Engineer", location: "Toronto", max_results: 15 });
+  assert.match(searched.message, /\*\*A\*\*｜AI Engineer/);
+  assert.match(searched.message, /https:\/\/website.example.test\/automations/);
+  assert.equal(mock.calls[2].url, `/api/agent/recommendation-batches/${DIGEST}`);
+});
+
+test("failed search renders no invented recommendations or ATS score", async (t) => {
+  const mock = await mockServer(async () => ({ body: { operation_id: APP, status: "failed", batch: null, run: { counts: {}, result: {} } } })); t.after(mock.close);
+  const bridge = new DiscordBridge(client(mock.baseUrl), allowlist);
+  const result = await bridge.execute({ kind: "search_status", operationId: APP }, IDS);
+  assert.equal(mock.calls[0].method, "GET");
+  assert.match(result.message, /failed/);
+  assert.match(result.message, /没有生成可推荐批次/);
+  assert.doesNotMatch(result.message, /\*\*A\*\*/);
+});
+
+test("application status includes a mobile review link without implying submission", async (t) => {
+  const mock = await mockServer(async () => ({ body: { agent: agent("preparing", 2, 86) } })); t.after(mock.close);
+  const bridge = new DiscordBridge(client(mock.baseUrl), allowlist, "https://website.example.test");
+  const result = await bridge.execute({ kind: "agent_status", agentId: AGENT }, IDS);
+  assert.match(result.message, /86\/100/);
+  assert.match(result.message, /尚未投递/);
+  assert.match(result.message, new RegExp(`agent=${AGENT}`));
+});
+
 test("Discord 推荐 input maps to Contract V1 GET batch with identity and idempotency headers", async (t) => {
   const mock = await mockServer(async () => ({ body: batch })); t.after(mock.close);
   const bridge = new DiscordBridge(client(mock.baseUrl), allowlist);

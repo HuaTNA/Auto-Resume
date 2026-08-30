@@ -17,6 +17,11 @@
         "format": "uri",
         "description": "AUTO_RESUME_API_URL"
       },
+      "webUrl": {
+        "type": "string",
+        "format": "uri",
+        "description": "Public frontend URL for mobile review links"
+      },
       "serviceToken": {
         "type": "string",
         "minLength": 1,
@@ -57,6 +62,10 @@
   },
   "contracts": {
     "tools": [
+      "auto_resume_get_workspace",
+      "auto_resume_search_jobs",
+      "auto_resume_get_search_status",
+      "auto_resume_get_application_status",
       "auto_resume_discord_command",
       "auto_resume_bind_discord",
       "auto_resume_get_latest_digest",
@@ -67,6 +76,9 @@
     ]
   },
   "toolMetadata": {
+    "auto_resume_search_jobs": {
+      "optional": true
+    },
     "auto_resume_discord_command": {
       "optional": true
     },

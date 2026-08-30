@@ -8,6 +8,10 @@ export interface DiscordContext {
 }
 
 export type ParsedCommand =
+  | { kind: "workspace" }
+  | { kind: "search"; query: string; location: string }
+  | { kind: "search_status"; operationId: string }
+  | { kind: "agent_status"; agentId: string }
   | { kind: "bind"; approvalId: string }
   | { kind: "latest_digest" }
   | { kind: "digest"; digestId: string }
@@ -61,4 +65,4 @@ export interface AgentResource {
 
 export interface TransitionResponse { agent: AgentResource }
 export interface ApprovalDecisionResponse { approval: Approval; agent: AgentResource }
-export interface BridgeResult { ok: true; targetType: "digest" | "approval"; targetId: string; message: string }
+export interface BridgeResult { ok: true; targetType: "digest" | "approval" | "workspace" | "search" | "agent"; targetId: string; message: string }

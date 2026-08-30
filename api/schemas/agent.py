@@ -92,6 +92,12 @@ class RecommendationBatchCreate(BaseModel):
     label: str = Field(default="", max_length=255)
 
 
+class AgentSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=255)
+    location: str = Field(default="Toronto", min_length=1, max_length=255)
+    max_results: int = Field(default=15, ge=1, le=30)
+
+
 class RecommendationSelectionCallback(BaseModel):
     event_id: str = Field(min_length=1, max_length=128)
     batch_id: str = Field(min_length=1, max_length=64)

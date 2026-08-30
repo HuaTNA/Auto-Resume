@@ -206,6 +206,45 @@ class AgentPlatformApiTests(unittest.TestCase):
             self.assertEqual(other.delete("/api/integrations/discord").status_code, 404)
         self.assertEqual(self.client.get("/api/integrations").json()["integrations"][0]["external_account"], discord_id)
 
+    def test_discord_search_persists_website_results_and_replays_without_new_search(self):
+        job = {"title": "Junior Engineer", "company": "Test Company", "location": "Toronto",
+               "source": "indeed", "url": "https://jobs.example.test/junior", "description": "Python SQL",
+               "created": datetime.utcnow().isoformat(), "match_score": 88, "match_reason": "Test fixture"}
+        with patch("api.workflows.job_search.execute_search_plan", return_value=([job], [])) as search, \
+                patch("api.workflows.job_search.rank_jobs", return_value=[job]):
+            response = self.client.post("/api/agent/searches", json={"query": "Junior Engineer", "location": "Toronto"}, headers={"Idempotency-Key": "discord-search-1"})
+            self.assertEqual(response.status_code, 200, response.text)
+            result = response.json()
+            self.assertEqual(result["status"], "completed", result)
+            self.assertEqual(result["batch"]["items"][0]["job"]["title"], "Junior Engineer")
+            self.assertEqual(result["batch"]["items"][0]["agent_state"], "discovered")
+            replay = self.client.post("/api/agent/searches", json={"query": "Junior Engineer", "location": "Toronto"}, headers={"Idempotency-Key": "discord-search-1"})
+            self.assertEqual(replay.json()["operation_id"], result["operation_id"])
+            self.assertEqual(search.call_count, 1)
+            conflict = self.client.post("/api/agent/searches", json={"query": "Different"}, headers={"Idempotency-Key": "discord-search-1"})
+            self.assertEqual(conflict.status_code, 409)
+        status = self.client.get(f"/api/agent/searches/{result['operation_id']}")
+        self.assertEqual(status.json()["status"], "completed")
+        workspace = self.client.get("/api/agent/workspace").json()
+        self.assertEqual(workspace["saved_job_count"], 1)
+        self.assertEqual(workspace["latest_batch"]["id"], result["batch"]["id"])
+        self.assertEqual(workspace["searches"], [])  # One-off searches must not schedule themselves.
+        with TestClient(app) as other:
+            self.assertEqual(other.get("/api/agent/workspace").status_code, 401)
+            other.post("/api/auth/register", json={"email": "search-other@example.com", "password": "strong-password"})
+            self.assertEqual(other.get(f"/api/agent/searches/{result['operation_id']}").status_code, 404)
+            self.assertEqual(other.get("/api/agent/workspace").json()["saved_job_count"], 0)
+
+    def test_discord_search_failure_remains_visible_and_is_not_reexecuted(self):
+        with patch("api.workflows.job_search.execute_search_plan", side_effect=RuntimeError("Search provider offline")) as search:
+            args = {"json": {"query": "Engineer"}, "headers": {"Idempotency-Key": "failed-search"}}
+            response = self.client.post("/api/agent/searches", **args)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["status"], "failed")
+            self.assertIsNone(response.json()["batch"])
+            self.client.post("/api/agent/searches", **args)
+            self.assertEqual(search.call_count, 1)
+
     def test_state_machine_rejects_stale_version_and_missing_materials(self):
         self._seed_job()
         agent_id = self._create_batch()["items"][0]["agent_id"]
