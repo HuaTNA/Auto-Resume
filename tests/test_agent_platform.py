@@ -245,6 +245,88 @@ class AgentPlatformApiTests(unittest.TestCase):
             self.client.post("/api/agent/searches", **args)
             self.assertEqual(search.call_count, 1)
 
+    def test_executor_claim_validate_and_callback_complete_a_simulated_application(self):
+        import tempfile
+        from contextlib import nullcontext
+        from integrations.openclaw.application_executor.worker import ApplicationWorker, WorkerApi
+        from integrations.openclaw.application_executor.policy import ExecutionPolicy
+        from integrations.openclaw.application_executor.browser import Control
+        from test_application_executor import FixturePage
+
+        self._seed_job()
+        with self.Session() as session:
+            session.query(CareerJob).filter_by(user_id=self.user_id).one().source_url = "https://greenhouse.mock-ats.test/jobs/1"
+            session.commit()
+        agent_id, _ = self._prepare_approval()
+        self.client.put("/api/integrations/discord", json={"external_account": "123456789012345678"})
+        queued = self.client.post(f"/api/agent/applications/{agent_id}/submissions", json={"provider": "openclaw"}, headers={"Idempotency-Key": "executor-roundtrip"})
+        self.assertEqual(queued.status_code, 202, queued.text)
+        receipt_id = queued.json()["receipt"]["id"]
+        api = WorkerApi("http://127.0.0.1:8000", "agent-service-token-for-tests-1234567890",
+                        "agent-callback-secret-for-tests", "123456789012345678", client=self.client)
+        page = FixturePage([Control("#resume", "file", label="Resume", required=True), Control("#submit", "submit", label="Submit Application")], confirmation="Application submitted. Confirmation number: MOCK-1234")
+        notifications = []
+        with tempfile.TemporaryDirectory() as state:
+            worker = ApplicationWorker(api, lambda: nullcontext(page), state,
+                ExecutionPolicy(frozenset({"greenhouse.mock-ats.test"}), dry_run=True),
+                material_writer=lambda snapshot, folder: ("/fixtures/resume.pdf", None), notify=notifications.append)
+            # Lose the first callback response after the browser succeeds.
+            # Recovery must deliver the durable result, never click again.
+            with patch.object(api, "callback", side_effect=RuntimeError("network interrupted")):
+                with self.assertRaises(RuntimeError):
+                    worker.run_once()
+            self.assertEqual(len(list(worker.outbox.glob("*.json"))), 1)
+            self.assertEqual(worker.run_once()["status"], "idle")
+            self.assertEqual(list(worker.outbox.glob("*.json")), [])
+            with self.assertRaises(RuntimeError):
+                api.claim(receipt_id, worker.worker_id)
+        self.assertEqual(page.clicks, ["#submit"])
+        current = self.client.get(f"/api/agent/applications/{agent_id}").json()["agent"]
+        self.assertEqual(current["state"], "submitted")
+        self.assertEqual(current["latest_receipt"]["external_application_id"], "MOCK-1234")
+        self.assertTrue(any(agent_id in message for message in notifications))
+        self.assertEqual(self.client.get("/api/agent/workspace").json()["executor"]["dry_run"], True)
+
+    def test_dry_run_worker_never_claims_or_opens_real_jobs(self):
+        import tempfile
+        from unittest.mock import Mock
+        from integrations.openclaw.application_executor.worker import ApplicationWorker
+        from integrations.openclaw.application_executor.policy import ExecutionPolicy
+        api, page_factory = Mock(), Mock()
+        api.queue.return_value = [{"id": "queued-real-application"}]
+        with tempfile.TemporaryDirectory() as state:
+            worker = ApplicationWorker(api, page_factory, state,
+                ExecutionPolicy(frozenset({"jobs.lever.co"}), dry_run=True))
+            self.assertEqual(worker.run_once()["status"], "dry_run_pending")
+        api.claim.assert_not_called()
+        page_factory.assert_not_called()
+
+    def test_executor_requires_both_secrets_and_rejects_changed_approval(self):
+        self._seed_job()
+        with self.Session() as session:
+            session.query(CareerJob).filter_by(user_id=self.user_id).one().source_url = "https://jobs.lever.co/example/1"
+            session.commit()
+        agent_id, application_id = self._prepare_approval()
+        self.client.put("/api/integrations/discord", json={"external_account": "123456789012345678"})
+        headers = {"Authorization": "Bearer agent-service-token-for-tests-1234567890", "X-Internal-Callback-Secret": "agent-callback-secret-for-tests", "X-Discord-User-Id": "123456789012345678"}
+        self.assertEqual(self.client.get("/api/internal/executor/queue").status_code, 401)
+        self.assertEqual(self.client.get("/api/internal/executor/queue", headers={**headers, "X-Internal-Callback-Secret": "wrong"}).status_code, 401)
+        queued = self.client.post(f"/api/agent/applications/{agent_id}/submissions", json={"provider": "openclaw"}, headers={"Idempotency-Key": "claim-test"}).json()
+        receipt_id = queued["receipt"]["id"]
+        path = f"/api/internal/executor/receipts/{receipt_id}"
+        claim = self.client.post(path + "/claim", json={"worker_id": "test-worker-123456"}, headers=headers)
+        self.assertEqual(claim.status_code, 200, claim.text)
+        self.assertEqual(self.client.post(path + "/claim", json={"worker_id": "test-worker-654321"}, headers=headers).status_code, 409)
+        payload = {"worker_id": "test-worker-123456", "fingerprint": "a" * 64, "content_digest": claim.json()["content_digest"], "job_url": claim.json()["job_url"]}
+        self.assertEqual(self.client.post(path + "/validate", json=payload, headers=headers).status_code, 200)
+        self.assertEqual(self.client.post(path + "/validate", json={**payload, "worker_id": "test-worker-654321"}, headers=headers).status_code, 409)
+        with self.Session() as session:
+            application = session.query(CareerApplication).filter_by(public_id=application_id).one()
+            session.query(HistoryRecord).filter_by(id=application.history_record_id).one().resume_tex = "changed after approval"
+            session.commit()
+        self.assertEqual(self.client.post(path + "/validate", json=payload, headers=headers).status_code, 409)
+        self.assertEqual(self.client.get("/api/internal/executor/queue", headers={**headers, "X-Discord-User-Id": "999999999999999999"}).status_code, 401)
+
     def test_state_machine_rejects_stale_version_and_missing_materials(self):
         self._seed_job()
         agent_id = self._create_batch()["items"][0]["agent_id"]

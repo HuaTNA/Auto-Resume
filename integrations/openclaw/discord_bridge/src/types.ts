@@ -12,6 +12,9 @@ export type ParsedCommand =
   | { kind: "search"; query: string; location: string }
   | { kind: "search_status"; operationId: string }
   | { kind: "agent_status"; agentId: string }
+  | { kind: "submit"; agentId: string; approvalId: string; expectedVersion: number }
+  | { kind: "answer"; agentId: string; questionKey: string; question: string; answer: string }
+  | { kind: "request_approval"; agentId: string; expectedVersion: number }
   | { kind: "bind"; approvalId: string }
   | { kind: "latest_digest" }
   | { kind: "digest"; digestId: string }
@@ -60,6 +63,8 @@ export interface AgentResource {
   resumeVersion?: number;
   latestApproval?: Approval;
   latestReceipt?: { id: string; status: string };
+  provider?: string;
+  lastError?: { code?: string; message?: string };
   updatedAt: string;
 }
 

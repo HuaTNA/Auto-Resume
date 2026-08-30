@@ -1,6 +1,8 @@
 # Application executor
 
-This package is an isolated browser execution boundary for external recruiting sites. It does not read or write application records, approvals, Discord messages, or frontend state.
+The browser core is an isolated execution boundary. The local `worker` connects
+it to Auto-Resume's user-bound queue, approval validation, callbacks and Discord
+notifications. The website remains the source of truth.
 
 See [AGENT_4_PROMPT.md](AGENT_4_PROMPT.md) for the executor assignment and
 [OPENCLAW_BROWSER_CONSTRAINTS.md](OPENCLAW_BROWSER_CONSTRAINTS.md) for the
@@ -52,3 +54,42 @@ appear in the allowlist.
 At deployment, `AUTO_RESUME_WEBHOOK_SECRET` in the OpenClaw worker must contain
 the same secret value as Agent 1's server-side `AGENT_CALLBACK_SECRET`; the
 different variable names are process-local and do not change the HTTP contract.
+
+## Run the connected worker
+
+From the repository root, with the existing application virtualenv:
+
+```sh
+.venv/bin/python -m pip install -r integrations/openclaw/application_executor/requirements.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m integrations.openclaw.application_executor.worker --check --discord-user-id YOUR_NUMERIC_ID
+.venv/bin/python -m integrations.openclaw.application_executor.install_service --discord-user-id YOUR_NUMERIC_ID --discord-channel-id YOUR_CHANNEL_ID
+```
+
+The installer starts a macOS LaunchAgent in **safe mode**. It polls every 20
+seconds, announces website/material updates, publishes pending callbacks and
+reports its heartbeat. It does not claim real queued applications, fill forms
+or launch a recruiting-site browser. Mock-only test allowlists can exercise
+the entire simulated loop. Secrets are loaded from `~/.openclaw/.env`, never
+embedded in the LaunchAgent. The machine must be awake and logged in.
+
+Before live use, stop the safe service, review the exact queued jobs and domain
+allowlist, then explicitly start the worker with `--loop --live` and the same
+user/channel arguments. Do not run two workers simultaneously. Live use still
+requires a current approved snapshot and an explicitly queued receipt for each
+job. Default domains are `boards.greenhouse.io`, `job-boards.greenhouse.io`,
+`jobs.lever.co`; unsupported sites require manual handling. A dedicated local
+Chromium profile is used, not your personal browser session.
+
+```sh
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/ai.auto-resume.executor.plist
+```
+
+Callback/notification outbox and protected logs are under
+`~/.openclaw/auto-resume-executor/`. A delivery failure retries only the saved
+result, not the application. Discord notifications are at-least-once. A crash
+after claiming a receipt leaves it `accepted`; reconcile the employer page
+manually before retrying. There is intentionally no automatic lease expiry or
+re-submission after an uncertain click. CAPTCHA, login, sensitive/unanswered
+questions and unverified confirmations stop execution. No success is inferred
+from clicking Submit alone.

@@ -53,6 +53,18 @@ export default defineToolPlugin({
     });
 
     return [
+      bound({ name: "auto_resume_submit_approved_application", label: "Queue an explicitly confirmed application", optional: true,
+        description: "Only after the user explicitly requests submission of this exact approved application. Requires current agent version and approval ID from website status. Queues one receipt; never claim submitted until a succeeded receipt. Dry-run workers do not click real submit.",
+        parameters: Type.Object({ ...messageContext, agentId: Type.String({ pattern: UUID }), approvalId: Type.String({ pattern: UUID }), expectedVersion: Type.Integer({ minimum: 1 }), confirmSubmission: Type.Literal(true) }, { additionalProperties: false }), outputSchema: resultSchema },
+      (params) => { if (params.confirmSubmission !== true) throw new Error("Explicit submission confirmation is required"); return { kind: "submit", agentId: params.agentId, approvalId: params.approvalId, expectedVersion: params.expectedVersion }; }),
+      bound({ name: "auto_resume_save_answer", label: "Save the user's application answer", optional: true,
+        description: "Save an exact answer supplied by the user to the website application. Never infer or invent eligibility, identity, immigration, salary or other answers. Changed answers require renewed approval.",
+        parameters: Type.Object({ ...messageContext, agentId: Type.String({ pattern: UUID }), questionKey: Type.String({ pattern: "^[a-z0-9][a-z0-9._-]*$", maxLength: 128 }), question: Type.String({ minLength: 1, maxLength: 1000 }), answer: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false }), outputSchema: resultSchema },
+      (params) => ({ kind: "answer", agentId: params.agentId, questionKey: params.questionKey, question: params.question, answer: params.answer })),
+      bound({ name: "auto_resume_request_approval", label: "Request review of the saved materials", optional: true,
+        description: "After materials and user-supplied answers are ready, request a website approval snapshot. This does not approve or submit anything.",
+        parameters: Type.Object({ ...messageContext, agentId: Type.String({ pattern: UUID }), expectedVersion: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }), outputSchema: resultSchema },
+      (params) => ({ kind: "request_approval", agentId: params.agentId, expectedVersion: params.expectedVersion })),
       bound({ name: "auto_resume_get_workspace", label: "Read my job-search website",
         description: "FIRST tool for any request about my jobs, recommendations, resumes, ATS, or application status. Reads the bound user's Auto-Resume website, saved-job count, search preferences and latest batch. Do not substitute web_search or claim website access without this tool succeeding.",
         parameters: Type.Object({ ...messageContext }, { additionalProperties: false }), outputSchema: resultSchema },

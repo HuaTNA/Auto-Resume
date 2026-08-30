@@ -43,6 +43,7 @@ from api.auth import get_secret_key
 from api.routes.auth import router as auth_router
 from api.routes.workspace import router as workspace_router
 from api.routes.agent import router as agent_router
+from api.routes.executor import router as executor_router
 from api.workflows.runner import run_due_automations
 
 
@@ -110,6 +111,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(workspace_router)
 app.include_router(agent_router)
+app.include_router(executor_router)
 
 
 _local_scheduler_started = False

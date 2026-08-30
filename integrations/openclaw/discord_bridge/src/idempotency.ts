@@ -5,7 +5,7 @@ function target(command: ParsedCommand): string {
   if (command.kind === "workspace") return "workspace";
   if (command.kind === "search") return "search";
   if (command.kind === "search_status") return `search:${command.operationId}`;
-  if (command.kind === "agent_status") return `agent:${command.agentId}`;
+  if (command.kind === "agent_status" || command.kind === "submit" || command.kind === "request_approval" || command.kind === "answer") return `agent:${command.agentId}${command.kind === "answer" ? `:${command.questionKey}` : ""}`;
   if (command.kind === "latest_digest") return "latest";
   if ("digestId" in command) return `digest:${command.digestId}`;
   return `approval:${command.approvalId}`;

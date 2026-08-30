@@ -57,12 +57,15 @@ function approval(value: unknown): Approval | undefined {
 function agent(value: unknown): AgentResource {
   const row = record(value, "agent");
   const receipt = row.latest_receipt == null ? undefined : record(row.latest_receipt, "receipt");
+  const job = row.job == null ? {} : record(row.job, "job");
+  const error = row.last_error == null ? undefined : record(row.last_error, "last_error");
   return {
     id: string(row.id, "agent.id"), applicationId: string(row.application_id, "agent.application_id"),
     state: string(row.state, "agent.state"), version: integer(row.version, "agent.version"), latestApproval: approval(row.latest_approval),
     atsScore: optionalNumber(row.ats_score), atsRounds: optionalNumber(row.ats_rounds),
     resumeVersion: optionalNumber(row.resume_version),
     latestReceipt: receipt ? { id: string(receipt.id, "receipt.id"), status: string(receipt.status, "receipt.status") } : undefined,
+    provider: optional(job.provider), lastError: error ? { code: optional(error.code), message: optional(error.message) } : undefined,
     updatedAt: string(row.updated_at, "agent.updated_at"),
   };
 }
@@ -116,6 +119,20 @@ export class AutoResumeApiClient {
 
   async getSearch(id: string, scope: RequestScope): Promise<Record<string, unknown>> {
     return record(await this.#request(`/api/agent/searches/${encodeURIComponent(id)}`, scope));
+  }
+
+  async saveAnswer(id: string, questionKey: string, question: string, answer: string, scope: RequestScope): Promise<AgentResource> {
+    const row = record(await this.#request(`${API_PATHS.agent(id)}/answers/${encodeURIComponent(questionKey)}`, scope, {
+      method: "PUT", body: JSON.stringify({ question_key: questionKey, question, answer, required: true, save_to_library: false }),
+    }));
+    return agent(row.agent);
+  }
+
+  async submit(id: string, provider: string, approvalId: string, expectedVersion: number, scope: RequestScope): Promise<AgentResource> {
+    const row = record(await this.#request(`${API_PATHS.agent(id)}/submissions`, scope, {
+      method: "POST", body: JSON.stringify({ provider, approval_id: approvalId, expected_version: expectedVersion }),
+    }));
+    return agent(row.agent);
   }
 
   async getBatch(id: string, scope: RequestScope): Promise<RecommendationBatch> {

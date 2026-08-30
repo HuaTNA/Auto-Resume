@@ -63,6 +63,7 @@ from api.workflows.application_agent import (
     transition_agent,
 )
 from api.workflows.job_search import ensure_application_for_job, generate_application_materials, execute_automation, run_to_dict
+from api.routes.executor import executor_status
 
 
 router = APIRouter(tags=["application-agent"])
@@ -210,7 +211,7 @@ def get_agent_workspace(current_user: User = Depends(get_agent_user), db: Sessio
         "applications": [{"id": row.public_id, "state": row.state, "version": row.version} for row in agents],
         "recent_searches": [{"operation_id": row.public_id, "name": row.name,
                              "status": _search_operation_dict(db, row)["status"]} for row in recent],
-        "submission_executor_ready": False,
+        "executor": executor_status(db, current_user.id),
     }
 
 
@@ -534,6 +535,8 @@ def create_submission(
         raise domain_error(409, ErrorCode.APPROVAL_REQUIRED,
                            "Application Agent must be approved before submission.")
     approval = current_approved_snapshot(db, agent)
+    if (data.approval_id is not None and data.approval_id != approval.public_id) or (data.expected_version is not None and data.expected_version != agent.version):
+        raise domain_error(409, ErrorCode.APPROVAL_STALE, "Submission confirmation no longer matches the current approved application.")
     try:
         enforce_external_api_limit(db, current_user, units=1, check_burst=True, commit=False)
     except HTTPException as exc:

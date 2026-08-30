@@ -35,10 +35,18 @@ reads the saved state. Set optional `webUrl` to the public frontend origin.
 Search/material operations allow up to 240 seconds; all other calls retain the
 configured short timeout. Bearer credentials are never forwarded through redirects.
 
-The production browser submission worker is **not connected**. Approval is not
-submission, a queued receipt is not success, and the bridge must report this gap
-explicitly rather than claim a full autonomous submission loop. Do not manufacture
-confirmation IDs or callbacks. Local executor fixtures remain dry-run only.
+Read `workspace.executor.connected` and `dry_run` for current executor readiness;
+never infer readiness from installed tools. Approval is not submission and a
+queued receipt is not success. The local worker defaults to safe mode and leaves
+real applications queued. See [worker setup](../application_executor/README.md).
+Do not manufacture confirmation IDs or callbacks.
+
+`auto_resume_save_answer` records only the user's explicit answer on the website;
+`auto_resume_request_approval` requests a new review after edits.
+`auto_resume_submit_approved_application` requires explicit submission intent,
+`confirmSubmission: true`, the current approval ID and application version. It
+only queues the application. Completion and blockers come from the worker's
+verified callback, not from the model.
 
 Contract V1 has no direct `GET approval` endpoint. Therefore:
 
@@ -104,7 +112,7 @@ Configure the plugin in OpenClaw using environment substitution; do not put lite
 }
 ```
 
-Configure `DISCORD_BOT_TOKEN` and `DISCORD_ALLOWED_GUILD_IDS` only on OpenClaw's Discord channel credential/access-control surface. The bot token is never a tool parameter. Use per-sender Discord sessions and allowlist the three mutating optional tools (`auto_resume_bind_discord`, `auto_resume_select_recommendation`, and `auto_resume_decide_approval`) only for trusted requesters.
+Configure `DISCORD_BOT_TOKEN` and `DISCORD_ALLOWED_GUILD_IDS` only on OpenClaw's Discord channel credential/access-control surface. The bot token is never a tool parameter. Use per-sender Discord sessions and allowlist mutating optional tools only for trusted requesters. Every tool uses trusted requester/channel metadata, never model-supplied identity.
 
 ## Chinese commands
 
@@ -140,4 +148,7 @@ A/B/C are the first, second, and third items in the contract's frozen ordered re
 
 ## Agent 3 handoff
 
-The browser executor must consume only a queued submission receipt created by Auto-Resume after a current human approval. This Discord bridge intentionally stops at recommendation selection and approval decision. It does not call submission or callback endpoints and does not pass page/JD text to tools as instructions.
+The browser executor consumes only a queued receipt after a current human approval.
+The bridge may queue explicitly requested submissions but never sends success
+callbacks. The worker validates the frozen approval before filling and again
+before submission. Recruiting pages/JDs remain untrusted data, not instructions.

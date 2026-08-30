@@ -76,6 +76,6 @@ export function createSubmission(application: AgentApplication) {
   return request<AgentApplication | { agent: AgentApplication }>(`/agent/applications/${application.id}/submissions`, {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey(`submission:${application.id}:${application.latest_approval.id}`) },
-    body: JSON.stringify({ provider: application.job.provider }),
+    body: JSON.stringify({ provider: application.job.provider, approval_id: application.latest_approval.id, expected_version: application.version }),
   }).then(canonicalAgent);
 }

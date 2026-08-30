@@ -194,6 +194,8 @@ class MaterialResultCallback(BaseModel):
 
 class SubmissionCreate(BaseModel):
     provider: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    approval_id: str | None = Field(default=None, max_length=64)
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 class SubmissionDispatch(BaseModel):

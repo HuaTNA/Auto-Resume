@@ -84,6 +84,10 @@ class ApplicationExecutor:
                     )
 
             self.page.goto(request.job_url)
+            if not self.policy.domain_allowed(self.page.url):
+                return self._blocked(Blocker(BlockerKind.DOMAIN_NOT_ALLOWED,
+                    "Application redirected outside the allowed domains", self.page.url),
+                    fingerprint, request=request, report_outcome=authorization_valid)
             adapter = self._select_adapter()
             if adapter is None:
                 return self._blocked(
@@ -116,6 +120,10 @@ class ApplicationExecutor:
                     report_outcome=True,
                 )
             adapter.guard_page(self.page)
+            if not self.policy.domain_allowed(self.page.url) or not self.authorization_validator.validate(request.submission, fingerprint):
+                return self._blocked(Blocker(BlockerKind.APPROVAL_REQUIRED,
+                    "Approval or destination changed before submission", self.page.url),
+                    fingerprint, request=request, report_outcome=True)
             try:
                 adapter.submit(self.page, request.submission.approval_id)
             except AdapterBlocker:
@@ -202,12 +210,19 @@ class ApplicationExecutor:
         report_outcome: bool = False,
     ) -> ExecutionResult:
         self.on_blocker(blocker)
+        questions = blocker.details.get("fields", [])
+        if blocker.details.get("field"):
+            questions = [blocker.details["field"]]
+        # Preserve bounded question labels so the user can resolve the blocker;
+        # never copy arbitrary page/error content or treat labels as commands.
+        questions = [str(label)[:200] for label in questions[:20]] if isinstance(questions, list) else []
+        message = blocker.message + (" — Questions: " + "; ".join(questions) if questions else "")
         callback = self._callback(
             request,
             fingerprint,
             "failed",
             error_code=blocker.kind.value,
-            error_message=blocker.message,
+            error_message=message[:6000],
             metadata={"adapter": adapter or "unknown", "blocker_kind": blocker.kind.value},
         ) if request and report_outcome else None
         return ExecutionResult(

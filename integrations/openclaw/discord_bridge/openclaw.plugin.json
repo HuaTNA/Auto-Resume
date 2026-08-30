@@ -62,6 +62,9 @@
   },
   "contracts": {
     "tools": [
+      "auto_resume_submit_approved_application",
+      "auto_resume_save_answer",
+      "auto_resume_request_approval",
       "auto_resume_get_workspace",
       "auto_resume_search_jobs",
       "auto_resume_get_search_status",
@@ -76,6 +79,15 @@
     ]
   },
   "toolMetadata": {
+    "auto_resume_submit_approved_application": {
+      "optional": true
+    },
+    "auto_resume_save_answer": {
+      "optional": true
+    },
+    "auto_resume_request_approval": {
+      "optional": true
+    },
     "auto_resume_search_jobs": {
       "optional": true
     },

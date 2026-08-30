@@ -125,6 +125,35 @@ test("replayed completed approval performs no second write", async (t) => {
   assert.equal(mock.calls.length, 1); assert.equal(mock.calls[0].method, "GET"); assert.match(result.message, /approved/);
 });
 
+test("submission queues only the exact approved snapshot and version", async (t) => {
+  const mock = await mockServer(async (call) => ({ body: { agent: call.method === "GET" ? agent("approved", 3) : { ...agent("submitting", 4), latest_receipt: { id: ITEM_A, status: "queued", provider: "openclaw" } } } })); t.after(mock.close);
+  const bridge = new DiscordBridge(client(mock.baseUrl), allowlist);
+  const result = await bridge.execute({ kind: "submit", agentId: AGENT, approvalId: APPROVAL, expectedVersion: 3 }, IDS);
+  assert.equal(mock.calls[1].url, `/api/agent/applications/${AGENT}/submissions`);
+  assert.deepEqual(mock.calls[1].body, { provider: "openclaw", approval_id: APPROVAL, expected_version: 3 });
+  assert.match(result.message, /尚未确认投递成功/);
+  for (const change of [{ expectedVersion: 2 }, { approvalId: DIGEST }]) {
+    await assert.rejects(() => bridge.execute({ kind: "submit", agentId: AGENT, approvalId: APPROVAL, expectedVersion: 3, ...change }, IDS), /已变化/);
+  }
+  assert.equal(mock.calls.filter(call => call.method === "POST").length, 1);
+});
+
+test("unapproved materials cannot be submitted from Discord", async (t) => {
+  const mock = await mockServer(async () => ({ body: { agent: agent("awaiting_approval", 3) } })); t.after(mock.close);
+  const bridge = new DiscordBridge(client(mock.baseUrl), allowlist);
+  await assert.rejects(() => bridge.execute({ kind: "submit", agentId: AGENT, approvalId: APPROVAL, expectedVersion: 3 }, IDS), /已变化/);
+  assert.equal(mock.calls.filter(call => call.method === "POST").length, 0);
+});
+
+test("Discord saves exactly the supplied answer and requests review separately", async (t) => {
+  const mock = await mockServer(async () => ({ body: { agent: agent("preparing", 4, 86) } })); t.after(mock.close);
+  const bridge = new DiscordBridge(client(mock.baseUrl), allowlist);
+  await bridge.execute({ kind: "answer", agentId: AGENT, questionKey: "work_authorization", question: "Work authorization?", answer: "Needs sponsorship" }, IDS);
+  assert.equal(mock.calls[0].body.answer, "Needs sponsorship");
+  await bridge.execute({ kind: "request_approval", agentId: AGENT, expectedVersion: 4 }, IDS);
+  assert.deepEqual(mock.calls[1].body, { action: "request_approval", expected_version: 4, reason: "Materials generated from Discord selection; human review required" });
+});
+
 test("approval status verifies latest approval ID through agent GET", async (t) => {
   const mock = await mockServer(async () => ({ body: { agent: agent("approved", 3) } })); t.after(mock.close);
   const bridge = new DiscordBridge(client(mock.baseUrl), allowlist);

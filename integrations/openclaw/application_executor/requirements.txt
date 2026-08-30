@@ -1,0 +1,5 @@
+# Local browser worker only. Do not add Chromium to the Vercel deployment.
+playwright>=1.50,<2
+httpx>=0.27,<1
+python-dotenv>=1.0
+reportlab>=4.2

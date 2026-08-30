@@ -11,8 +11,23 @@ export class DiscordBridge {
     authorizeDiscordContext(context, this.allowlist);
     const scope = { ...context, idempotencyKey: commandIdempotencyKey(command, context) };
     const website = new URL("/career/applications", this.webUrl).toString();
+    if (command.kind === "answer") {
+      const current = await this.client.saveAnswer(command.agentId, command.questionKey, command.question, command.answer, scope);
+      return { ok: true, targetType: "agent", targetId: current.id, message: `回答已保存到网站；状态：${current.state}（v${current.version}）。修改材料/回答后必须重新审批。\n<${website}?agent=${current.id}>` };
+    }
+    if (command.kind === "request_approval") {
+      const result = await this.client.requestApproval(command.agentId, command.expectedVersion, scope);
+      return { ok: true, targetType: "agent", targetId: result.agent.id, message: `已请求网站审核：${result.agent.state}（v${result.agent.version}），approval：${result.agent.latestApproval?.id ?? "无"}\n<${website}?agent=${result.agent.id}>` };
+    }
+    if (command.kind === "submit") {
+      const current = await this.client.getAgent(command.agentId, scope);
+      if (current.state !== "approved" || current.latestApproval?.status !== "approved" || current.latestApproval.id !== command.approvalId || current.version !== command.expectedVersion) throw new Error("申请或审批已变化；请重新读取并让用户确认，不能自动投递。");
+      const submitted = await this.client.submit(current.id, current.provider ?? "openclaw", command.approvalId, command.expectedVersion, scope);
+      return { ok: true, targetType: "agent", targetId: submitted.id, message: `申请已排队，尚未确认投递成功。回执：${submitted.latestReceipt?.id ?? "待查询"}；状态：${submitted.latestReceipt?.status ?? submitted.state}。执行器会回写结果；安全演练模式不会点击真实提交。\n<${website}?agent=${submitted.id}>` };
+    }
     if (command.kind === "workspace") {
       const workspace = await this.client.getWorkspace(scope);
+      const executor = workspace.executor as { connected?: boolean; dry_run?: boolean } | undefined;
       return { ok: true, targetType: "workspace", targetId: "current", message: [
         "已读取 Auto-Resume 网站账户（不是独立网页搜索）。",
         `网站已保存岗位数：${workspace.saved_job_count ?? 0}`,
@@ -20,7 +35,8 @@ export class DiscordBridge {
         `申请状态：${JSON.stringify(workspace.applications ?? [])}`,
         `最近搜岗操作（超时后先查这里，勿重复启动）：${JSON.stringify(workspace.recent_searches ?? [])}`,
         workspace.latest_batch ? "已有推荐批次，请调用 auto_resume_get_latest_digest 获取 A/B/C。" : "网站还没有推荐批次。请根据用户搜岗条件调用 auto_resume_search_jobs；不要把 web_search 结果说成网站已保存的推荐。",
-        "真实自动投递执行器尚未接入。批准材料不等于已投递；不要声称排队就是成功。",
+        executor?.connected ? (executor.dry_run ? "执行器在线，处于安全演练模式：不会点击真实投递。" : "执行器在线，仅处理明确批准并排队的申请。") : "执行器当前离线：排队任务不会立即执行。",
+        "批准材料不等于已投递；只有网站 succeeded 回执才代表已验证的投递。",
         `<${website}>`,
       ].join("\n") };
     }
@@ -44,7 +60,7 @@ export class DiscordBridge {
     if (command.kind === "agent_status") {
       const current = await this.client.getAgent(command.agentId, scope);
       return { ok: true, targetType: "agent", targetId: current.id, message:
-        `网站申请 ${current.id}\n状态：${current.state}（v${current.version}）\nATS：${current.atsScore == null ? "尚未生成" : `${current.atsScore}/100`}\n回执：${current.latestReceipt?.status ?? "无（尚未投递）"}\n<${website}?agent=${current.id}>` };
+        `网站申请 ${current.id}\n状态：${current.state}（v${current.version}）\nATS：${current.atsScore == null ? "尚未生成" : `${current.atsScore}/100`}\n审批：${current.latestApproval?.id ?? "无"}（${current.latestApproval?.status ?? "未请求"}）\n回执：${current.latestReceipt?.status ?? "无（尚未投递）"}\n需处理：${current.lastError?.message ?? "无"}\n<${website}?agent=${current.id}>` };
     }
     if (command.kind === "bind") return { ok: true, targetType: "approval", targetId: command.approvalId, message: `Discord 身份和当前 User/Guild/Channel 已获授权；关联 approval \`${command.approvalId}\`` };
     if (command.kind === "latest_digest") {
