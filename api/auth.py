@@ -64,14 +64,25 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int, email: str) -> str:
-    """Create a signed JWT with user_id and email, expires in 24h."""
-    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+def create_access_token(
+    user_id: int,
+    email: str,
+    expires_hours: int = ACCESS_TOKEN_EXPIRE_HOURS,
+    scope: str | None = None,
+) -> str:
+    """
+    Create a signed JWT with user_id and email.
+    Defaults to the 24h web session; pass expires_hours/scope for
+    long-lived agent tokens (scope="agent") issued via scripts/issue_agent_token.py.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
     payload = {
         "sub": str(user_id),
         "email": email,
         "exp": expire,
     }
+    if scope:
+        payload["scope"] = scope
     return jwt.encode(payload, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
