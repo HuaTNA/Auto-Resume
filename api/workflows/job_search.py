@@ -311,7 +311,11 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
                        "approval_status": application.approval_status if application else None,
                        "materials_generated": generated or (application is not None and _has_materials(db, application))})
         output_jobs.append(output)
-        if (application and qualifies and
+        # A repeated provider result is useful for run history, but it should
+        # not re-enter a later recommendation digest. Otherwise an application
+        # the user already selected (including one awaiting approval) can take
+        # an A/B/C slot again just because the job board returned it anew.
+        if (is_new and application and qualifies and
                 application.status in {"suggested", "generated"} and
                 len(digest_entries) < 3):
             digest_entries.append((job, application))

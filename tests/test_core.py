@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from api.auth import create_oauth_state, decode_oauth_state, get_secret_key
 from api.database import (
-    Automation, AutomationRun, Base, CareerApplication, CareerJob,
+    ApplicationAgent, Automation, AutomationRun, Base, CareerApplication, CareerJob,
     CareerJobMatch, HistoryRecord, RecommendationBatch,
     RecommendationBatchItem, User, _build_db_url,
 )
@@ -179,6 +179,83 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(result["recommendation_batch_id"], batch.public_id)
             self.assertEqual(item.position, 0)
             self.assertEqual(batch.idempotency_key, "automation-run:run-digest")
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_job_search_digest_excludes_previously_found_job_awaiting_approval(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        try:
+            user = User(email="fresh-digest@example.com", password_hash="unused")
+            session.add(user); session.flush()
+            automation = Automation(
+                public_id="automation-fresh-digest", user_id=user.id,
+                name="Machine Learning Engineer", kind="job_search",
+                config_json='{"sources":["indeed"],"agent_enabled":false,"min_match_score":70}',
+            )
+            session.add(automation); session.flush()
+            run = AutomationRun(
+                public_id="run-fresh-digest", automation_id=automation.id,
+                user_id=user.id, status="running",
+            )
+            session.add(run); session.flush()
+
+            old_job = CareerJob(
+                public_id="old-yelp-job", user_id=user.id,
+                title="Entry Level Machine Learning Engineer", company="Yelp",
+                location="Toronto", source="adzuna",
+                source_url="https://example.test/old-yelp",
+            )
+            session.add(old_job); session.flush()
+            old_history = HistoryRecord(
+                user_id=user.id, timestamp=datetime.now().isoformat(),
+                job_title=old_job.title, company=old_job.company, seniority="",
+                required_skills="[]", template="classic", ats_scores="{}",
+                output_files="[]", resume_tex="existing resume",
+                cover_letter="", status="generated",
+            )
+            session.add(old_history); session.flush()
+            old_application = CareerApplication(
+                public_id="old-yelp-application", user_id=user.id,
+                job_id=old_job.id, history_record_id=old_history.id,
+                status="generated", approval_status="pending", match_score=90,
+            )
+            session.add(old_application); session.flush()
+            session.add(ApplicationAgent(
+                public_id="old-yelp-agent", user_id=user.id,
+                application_id=old_application.id, state="awaiting_approval",
+            ))
+            session.flush()
+
+            repeated = {
+                "external_id": "old-yelp-listing", "title": old_job.title,
+                "company": old_job.company, "location": "Remote Canada / Toronto",
+                "url": "https://example.test/old-yelp", "source": "adzuna",
+                "match_score": 95, "match_reason": "Strong match",
+            }
+            fresh = {
+                "external_id": "new-ml-listing", "title": "Junior ML Engineer",
+                "company": "Acme", "location": "Toronto",
+                "url": "https://example.test/new-ml", "source": "indeed",
+                "match_score": 88, "match_reason": "Strong match",
+            }
+            ranked = [repeated, fresh]
+            with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=False), \
+                    patch("api.workflows.job_search.search_jobs", return_value=(ranked, [])), \
+                    patch("api.workflows.job_search.rank_jobs", return_value=ranked):
+                counts, result = _job_search_pipeline(session, automation, run, user)
+            session.commit()
+
+            self.assertEqual(counts["new_jobs"], 1)
+            self.assertEqual(counts["duplicates"], 1)
+            batch = session.query(RecommendationBatch).one()
+            item = session.query(RecommendationBatchItem).one()
+            recommended_job = session.query(CareerJob).filter_by(id=item.job_id).one()
+            self.assertEqual(result["recommendation_batch_id"], batch.public_id)
+            self.assertEqual(recommended_job.company, "Acme")
+            self.assertNotEqual(recommended_job.id, old_job.id)
         finally:
             session.close()
             engine.dispose()
