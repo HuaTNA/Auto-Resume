@@ -311,6 +311,7 @@ def _job_search_pipeline(db: Session, automation: Automation, run: AutomationRun
                        "approval_status": application.approval_status if application else None,
                        "materials_generated": generated or (application is not None and _has_materials(db, application))})
         output_jobs.append(output)
+        # Only jobs first persisted during this run may enter its digest.
         # A repeated provider result is useful for run history, but it should
         # not re-enter a later recommendation digest. Otherwise an application
         # the user already selected (including one awaiting approval) can take
