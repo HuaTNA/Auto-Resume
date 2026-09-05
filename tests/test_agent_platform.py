@@ -88,6 +88,45 @@ class AgentPlatformApiTests(unittest.TestCase):
             else:
                 os.environ[name] = value
 
+    def test_agent_list_paginates_summaries_filters_states_and_isolates_users(self):
+        self._seed_job()
+        batch = self._create_batch()
+        agent_id = batch["items"][0]["agent_id"]
+        with self.Session() as session:
+            for index in range(26):
+                session.add(CareerJob(public_id=f"job-page-{index}", user_id=self.user_id,
+                                      title=f"Engineer {index}", company="Acme", source="indeed", location="Toronto"))
+            session.commit()
+        response = self.client.post(
+            "/api/agent/recommendation-batches",
+            json={"job_ids": [f"job-page-{index}" for index in range(26)], "label": "Pagination"},
+            headers={"Idempotency-Key": "pagination-batch"},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        first = self.client.get("/api/agent/applications?view=new_jobs&limit=25").json()
+        second = self.client.get("/api/agent/applications?view=new_jobs&limit=25&offset=25").json()
+        self.assertEqual(first["total"], 27)
+        self.assertEqual(len(first["applications"]), 25)
+        self.assertEqual(len(second["applications"]), 2)
+        self.assertFalse({row["id"] for row in first["applications"]} & {row["id"] for row in second["applications"]})
+        for row in first["applications"]:
+            self.assertNotIn("answers", row)
+            self.assertNotIn("timeline", row)
+            self.assertNotIn("resume_tex", row)
+        self.client.post(f"/api/agent/applications/{agent_id}/transitions", json={"action": "start", "expected_version": 1})
+        active = self.client.get("/api/agent/applications").json()
+        self.assertEqual(active["counts"], {"applications": 1, "new_jobs": 26, "inbox": 0})
+        self.assertEqual(active["applications"][0]["id"], agent_id)
+        for query in ("limit=101", "limit=0", "offset=-1", "view=unknown"):
+            self.assertEqual(self.client.get(f"/api/agent/applications?{query}").status_code, 422)
+        self.client.post("/api/auth/logout")
+        registered = self.client.post("/api/auth/register", json={"email": "other-agent@example.com", "password": "strong-password"})
+        self.assertEqual(registered.status_code, 200)
+        other = self.client.get("/api/agent/applications?view=new_jobs").json()
+        self.assertEqual(other["total"], 0)
+        self.assertEqual(other["applications"], [])
+        self.assertEqual(self.client.get(f"/api/agent/applications/{agent_id}").status_code, 404)
+
     def _seed_job(self, public_id: str = "job-agent") -> None:
         with self.Session() as session:
             session.add(CareerJob(

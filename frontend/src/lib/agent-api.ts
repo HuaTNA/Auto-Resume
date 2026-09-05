@@ -52,10 +52,28 @@ function canonicalAgent(payload: AgentApplication | { agent: AgentApplication })
   return "agent" in payload ? payload.agent : payload;
 }
 
-export async function listAgentApplications(): Promise<AgentApplication[]> {
-  const career = await request<{ applications: Array<{ id: string }> }>("/career/applications");
-  const details = await Promise.all(career.applications.map(({ id }) => getAgentApplication(id)));
-  return details;
+export type AgentListView = "applications" | "new_jobs" | "inbox";
+export type AgentSummary = Pick<AgentApplication, "id" | "application_id" | "state" | "version" | "match_score" | "job" | "updated_at">;
+export interface AgentPage { applications: AgentSummary[]; counts: Record<AgentListView, number>; total: number; offset: number; limit: number }
+
+export function listAgentApplications(view: AgentListView = "applications", offset = 0) {
+  return request<AgentPage>(`/agent/applications?view=${view}&offset=${offset}&limit=25`);
+}
+
+export function startApplication(application: AgentApplication) {
+  return request<AgentApplication | { agent: AgentApplication }>(`/agent/applications/${application.id}/transitions`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey(`start:${application.id}:${application.version}`) },
+    body: JSON.stringify({ action: "start", expected_version: application.version }),
+  }).then(canonicalAgent);
+}
+
+export function prepareApplicationMaterials(application: AgentApplication) {
+  return request<AgentApplication | { agent: AgentApplication }>(`/agent/applications/${application.id}/materials`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey(`materials:${application.id}`) },
+    body: JSON.stringify({ target_ats_score: 85, max_optimization_rounds: 2, template: "classic", generate_cover_letter: true }),
+  }).then(canonicalAgent);
 }
 
 export function getAgentApplication(id: string) {
@@ -66,7 +84,7 @@ export function saveApplicationAnswer(application: AgentApplication, questionKey
   return request<AgentApplication | { agent: AgentApplication }>(`/agent/applications/${application.id}/answers/${encodeURIComponent(questionKey)}`, {
     method: "PUT",
     headers: { "Idempotency-Key": idempotencyKey(`answer:${application.id}:${application.version}:${questionKey}`) },
-    body: JSON.stringify({ question_key: questionKey, question, answer, required: true, save_to_library: saveToLibrary }),
+    body: JSON.stringify({ question_key: questionKey, question, answer, required: application.answers.find((item) => item.question_key === questionKey)?.required ?? true, save_to_library: saveToLibrary }),
   }).then(canonicalAgent);
 }
 

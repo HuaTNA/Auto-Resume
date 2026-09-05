@@ -35,6 +35,14 @@ function applicationById(id: string) {
 export async function GET(_request: NextRequest, context: { params: Promise<{ resource: string[] }> }) {
   if (!enabled()) return unavailable();
   const resource = (await context.params).resource;
+  if (resource.join("/") === "agent/applications") {
+    const view = _request.nextUrl.searchParams.get("view") || "applications";
+    const offset = Number(_request.nextUrl.searchParams.get("offset") || 0);
+    const limit = Number(_request.nextUrl.searchParams.get("limit") || 25);
+    const groups = { applications: store().filter((item) => item.state !== "discovered"), new_jobs: store().filter((item) => item.state === "discovered"), inbox: store().filter((item) => ["awaiting_answers", "awaiting_approval", "needs_attention"].includes(item.state)) };
+    const items = groups[view as keyof typeof groups] || [];
+    return NextResponse.json({ applications: items.slice(offset, offset + limit).map(({ id, state, version, match_score, job, updated_at }) => ({ id, state, version, match_score, job, updated_at })), counts: { applications: groups.applications.length, new_jobs: groups.new_jobs.length, inbox: groups.inbox.length }, total: items.length, offset, limit });
+  }
   if (resource.join("/") === "career/applications") {
     return NextResponse.json({ applications: store().map(({ id }) => ({ id })) }, { headers: { "X-Auto-Resume-Mock": "true" } });
   }
@@ -65,6 +73,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ res
 
 export async function POST(request: NextRequest, context: { params: Promise<{ resource: string[] }> }) {
   if (!enabled()) return unavailable();
+  if ((await context.params).resource.join("/") === "reset") {
+    globalStore.__huaAgentMock = structuredClone(MOCK_AGENT_APPLICATIONS);
+    return NextResponse.json({ ok: true });
+  }
   const invalidHeader = validateJsonHeader(request);
   if (invalidHeader) return invalidHeader;
   const resource = (await context.params).resource;
@@ -75,12 +87,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     const application = applicationById(resource[2]);
     if (!application) return unavailable();
     if (body.expected_version !== application.version) return NextResponse.json({ detail: { code: "agent.invalid_state_transition", message: "Application version is stale", retryable: true, context: {} } }, { status: 409 });
+    if (body.action === "start" && application.state === "discovered") {
+      application.state = "preparing"; application.version += 1;
+      return response(application);
+    }
     if (body.action !== "request_approval" || application.answers.some((item) => item.required && !item.answer.trim())) return NextResponse.json({ detail: { code: "agent.answers_incomplete", message: "Complete required answers first", retryable: false, context: {} } }, { status: 409 });
     application.state = "awaiting_approval";
     application.version += 1;
     application.updated_at = new Date().toISOString();
     application.latest_approval = { id: crypto.randomUUID(), status: "pending", content_digest: "sha256:mock-current-snapshot", created_at: application.updated_at };
     application.timeline.unshift({ id: crypto.randomUUID(), kind: "approval", title: "Approval requested", detail: "Final submission remains blocked until you approve this snapshot.", created_at: application.updated_at });
+    return response(application);
+  }
+
+  if (resource[0] === "agent" && resource[1] === "applications" && resource[3] === "materials") {
+    const application = applicationById(resource[2]);
+    if (!application || !["preparing", "needs_attention"].includes(application.state)) return unavailable();
+    application.resume_version = 1; application.ats_score = 86; application.version += 1;
+    application.updated_at = new Date().toISOString();
     return response(application);
   }
 

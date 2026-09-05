@@ -55,9 +55,9 @@ export interface AgentApplication {
   version: number;
   state: AgentState;
   match_score: number;
-  ats_score?: number;
+  ats_score?: number | null;
   ats_rounds: number;
-  resume_version?: number;
+  resume_version?: number | null;
   job: {
     id: string;
     title: string;

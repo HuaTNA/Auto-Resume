@@ -2,6 +2,17 @@ import type { AgentApplication } from "./agent-types";
 
 export const MOCK_AGENT_APPLICATIONS: AgentApplication[] = [
   {
+    id: "6298942a-1c4a-4bc4-8a83-9e6c192dbf53",
+    version: 1,
+    state: "discovered",
+    match_score: 90,
+    ats_rounds: 0,
+    job: { id: "54684344-5cce-4426-a15d-91a13f9e66de", title: "Product Operations Manager", company: "Birch Systems", location: "Toronto · Hybrid", provider: "greenhouse", source_url: "https://boards.greenhouse.io/birch-example/jobs/40004" },
+    answers: [],
+    timeline: [{ id: "e5a6c643-68af-4f39-9738-c877f198286a", kind: "state", title: "New role discovered", detail: "The Agent found and saved this role for review. No application has been started.", created_at: "2026-08-27T16:12:00Z" }],
+    updated_at: "2026-08-27T16:12:00Z",
+  },
+  {
     id: "c5a63b22-50f9-4aeb-aa62-256386ad12f1",
     version: 4,
     state: "awaiting_answers",

@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 from uuid import uuid4, uuid5, NAMESPACE_URL
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -274,6 +274,50 @@ def get_recommendation_batch(public_id: str, current_user: User = Depends(get_ag
     if not row:
         raise domain_error(404, ErrorCode.NOT_FOUND, "Recommendation batch not found.")
     return _batch_dict(db, row)
+
+
+@router.get("/api/agent/applications")
+def list_application_agents(
+    view: str = Query(default="applications", pattern="^(applications|new_jobs|inbox)$"),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=25, ge=1, le=100),
+    current_user: User = Depends(get_agent_user),
+    db: Session = Depends(get_db),
+):
+    # Summaries do not load answers, documents, receipts, or timeline events.
+    from sqlalchemy import func
+    state = func.coalesce(ApplicationAgent.state, "discovered")
+    query = db.query(CareerApplication, CareerJob, ApplicationAgent).join(
+        CareerJob, CareerApplication.job_id == CareerJob.id,
+    ).outerjoin(ApplicationAgent, ApplicationAgent.application_id == CareerApplication.id).filter(
+        CareerApplication.user_id == current_user.id,
+        CareerJob.user_id == current_user.id,
+    )
+    filters = {
+        "applications": state != "discovered",
+        "new_jobs": state == "discovered",
+        "inbox": state.in_(["awaiting_answers", "awaiting_approval", "needs_attention"]),
+    }
+    counts = {key: query.filter(condition).count() for key, condition in filters.items()}
+    rows = query.filter(filters[view]).order_by(
+        CareerApplication.created_at.desc(), CareerApplication.id.desc(),
+    ).offset(offset).limit(limit).all()
+    return {
+        "applications": [{
+            "id": agent.public_id if agent else application.public_id,
+            "application_id": application.public_id,
+            "state": agent.state if agent else "discovered",
+            "version": agent.version if agent else 1,
+            "match_score": application.match_score,
+            "job": {"id": job.public_id, "title": job.title, "company": job.company,
+                    "location": job.location, "provider": job.source, "source_url": job.source_url},
+            "updated_at": (agent.updated_at if agent else application.updated_at).isoformat(),
+        } for application, job, agent in rows],
+        "counts": counts,
+        "total": counts[view],
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 @router.get("/api/agent/applications/{public_id}")
