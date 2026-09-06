@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { BirchIcon } from "@/components/icons/BirchIcons";
-import { createGenerationJob, getGenerationJob, getProfileCompleteness, compilePdf, compileCoverLetterPdf } from "@/lib/api";
+import { createGenerationJob, advanceGenerationJob, getActiveGenerationJob, getGenerationJob, getProfileCompleteness, compilePdf, compileCoverLetterPdf } from "@/lib/api";
 import { useLanguage } from "@/lib/language-context";
 
 type Step = "input" | "parsing" | "bullets" | "generating" | "result";
@@ -64,6 +64,87 @@ function GenerateContent() {
   const [draftContext, setDraftContext] = useState<GenerateDraft | null>(null);
   const [error, setError] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [activeJobId, setActiveJobId] = useState<string | null>(searchParams.get("job"));
+  const [recovering, setRecovering] = useState(!searchParams.get("job"));
+  const [monitoring, setMonitoring] = useState(true);
+  const [pollVersion, setPollVersion] = useState(0);
+  const starting = useRef(false);
+  const pendingRequest = useRef<{ payload: string; key: string } | null>(null);
+  const mounted = useRef(true);
+
+  function rememberJob(id: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("job", id);
+    window.history.replaceState(null, "", url);
+    setActiveJobId(id);
+    setStep("generating");
+    setMonitoring(true);
+  }
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (activeJobId || !recovering) return;
+    let cancelled = false;
+    void getActiveGenerationJob().then(({ job }) => {
+      if (cancelled) return;
+      if (job) rememberJob(job.id);
+      setRecovering(false);
+    }).catch(() => {
+      if (!cancelled) { setError(text("暂时无法查询已有任务，请重试查询后再生成。", "Could not check existing jobs. Retry the status check before generating.")); setMonitoring(false); }
+    });
+    return () => { cancelled = true; };
+  }, [activeJobId, recovering, pollVersion, text]);
+
+  useEffect(() => {
+    if (!activeJobId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+    setStep("generating"); setMonitoring(true); setError("");
+    async function poll() {
+      try {
+        const { job } = await getGenerationJob(activeJobId!);
+        if (cancelled) return;
+        failures = 0; setError("");
+        if (job.status === "queued" || job.status === "running") {
+          setStatusMsg(job.stalled
+            ? text("上一阶段可能被服务器中断，正在从已保存的进度恢复…", "The previous stage may have been interrupted. Resuming from saved progress…")
+            : job.status === "queued" ? text("正在等待生成服务…", "Waiting for generation service…") : text(`正在生成申请材料… ${job.progress}%`, `Creating application materials… ${job.progress}%`));
+          if (job.status === "queued" || job.stalled) await advanceGenerationJob(job.id);
+          if (!cancelled) timer = setTimeout(poll, 3_000);
+          return;
+        }
+        if (job.status !== "completed" || !job.result) {
+          setError(job.error || text("生成任务失败。", "Generation failed.")); setMonitoring(false);
+          setStatusMsg(text("后台已报告失败。你可以重新生成。", "The server reported failure. You can start a new generation."));
+          setStep("input"); setActiveJobId(null);
+          const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url);
+          pendingRequest.current = null;
+          return;
+        }
+        const result = job.result;
+        setJdAnalysis(result.jd_analysis);
+        setTotalBullets((result.filtered_profile?.experiences || []).reduce((sum: number, item: { bullets?: unknown[] }) => sum + (item.bullets?.length || 0), 0) + (result.filtered_profile?.projects || []).reduce((sum: number, item: { bullets?: unknown[] }) => sum + (item.bullets?.length || 0), 0));
+        setResumeTex(result.resume_tex); setCoverLetter(result.cover_letter || "");
+        setAtsResult(result.ats_result); setRounds(result.optimization_rounds || []); setHistoryRecordId(result.record_id);
+        try { window.sessionStorage.removeItem("hua:generate-draft"); } catch { /* Result remains available by job URL. */ }
+        setStep("result"); setStatusMsg(""); setDraftContext(null); setMonitoring(false);
+      } catch (reason) {
+        if (cancelled) return;
+        failures += 1;
+        setError(text("暂时无法读取进度，任务已保留。", "Could not read progress; your job is preserved.") + " " + (reason instanceof Error ? reason.message : ""));
+        if (failures < 3) timer = setTimeout(poll, 3_000);
+        else setMonitoring(false);
+      }
+    }
+    void poll();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [activeJobId, pollVersion, text]);
+
   const [previewTab, setPreviewTab] = useState<"resume" | "cover">("resume");
 
   useEffect(() => {
@@ -86,44 +167,22 @@ function GenerateContent() {
   }, []);
 
   async function handleGenerate() {
-    if (!jdText.trim() || profileBlocking.length > 0) return;
-    setError("");
-    setHistoryRecordId(null);
-
+    if (!jdText.trim() || profileBlocking.length > 0 || recovering || activeJobId || starting.current) return;
+    starting.current = true; setError(""); setHistoryRecordId(null); setStep("parsing");
+    setStatusMsg(text("正在建立生成任务…", "Preparing generation…"));
+    const payload = JSON.stringify([jdText, template, genCoverLetter]);
+    if (pendingRequest.current?.payload !== payload) pendingRequest.current = { payload, key: crypto.randomUUID() };
     try {
-      setStep("parsing");
-      setStatusMsg(text("正在建立生成任务…", "Preparing generation…"));
-      const key = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-      let job = (await createGenerationJob(jdText, template, genCoverLetter, key)).job;
-      let pollingAttempts = 0;
-      while (job.status === "queued" || job.status === "running") {
-        pollingAttempts += 1;
-        if (pollingAttempts > 240) throw new Error(text("生成等待时间过长，请稍后从申请记录中查看。", "Generation is taking longer than expected. Check Applications again shortly."));
-        setStep(job.status === "queued" ? "parsing" : "generating");
-        setStatusMsg(job.status === "queued" ? text("正在等待生成服务…", "Waiting for generation service…") : text(`正在生成申请材料… ${job.progress}%`, `Creating application materials… ${job.progress}%`));
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        job = (await getGenerationJob(job.id)).job;
-      }
-      if (job.status !== "completed" || !job.result) throw new Error(job.error || "Generation failed");
-      const result = job.result;
-      setJdAnalysis(result.jd_analysis);
-      setTotalBullets((result.filtered_profile?.experiences || []).reduce((sum: number, item: { bullets?: unknown[] }) => sum + (item.bullets?.length || 0), 0) + (result.filtered_profile?.projects || []).reduce((sum: number, item: { bullets?: unknown[] }) => sum + (item.bullets?.length || 0), 0));
-      setResumeTex(result.resume_tex);
-      setCoverLetter(result.cover_letter || "");
-      setAtsResult(result.ats_result);
-      setRounds(result.optimization_rounds || []);
-      setHistoryRecordId(result.record_id);
-      window.sessionStorage.removeItem("hua:generate-draft");
-      setStep("result");
-      setStatusMsg("");
-      setDraftContext(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Generation failed");
-      setStep("input");
-    }
+      const { job } = await createGenerationJob(jdText, template, genCoverLetter, pendingRequest.current.key);
+      if (mounted.current) rememberJob(job.id);
+    } catch (reason) {
+      if (mounted.current) { setError(reason instanceof Error ? reason.message : "Generation failed"); setStep("input"); }
+    } finally { starting.current = false; }
   }
 
   function handleReset() {
+    setActiveJobId(null); pendingRequest.current = null;
+    const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url);
     setStep("input");
     setJdText("");
     setJdAnalysis(null);
@@ -175,6 +234,7 @@ function GenerateContent() {
         {error && (
           <div role="alert" className="mb-6 rounded-[8px] border border-[rgba(38,51,47,0.16)] bg-[#F8FAF8] p-4 text-sm text-[#26332F]">
             {error}
+            {!monitoring && (activeJobId || recovering) && <button className="secondary-button ml-3" onClick={() => { setMonitoring(true); setPollVersion((value) => value + 1); }}>{text("重新查询进度", "Retry status check")}</button>}
           </div>
         )}
         {step === "input" && profileBlocking.length > 0 && <div className="mb-5 flex flex-col gap-4 rounded-[12px] border border-[rgba(38,51,47,0.16)] bg-[#F8FAF8] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{text("职业档案还不能用于生成", "Your career profile is not ready yet")}</p><p className="mt-1 text-sm text-[#52645C]">{text(`还需完成 ${profileBlocking.length} 项必要信息：至少一段经历或项目、成果证据及基本联系方式。`, `${profileBlocking.length} required profile item(s) still need attention, including experience evidence and contact details.`)}</p></div><Link href="/profile" className="secondary-button shrink-0">{text("现在完善", "Complete profile")}<span aria-hidden="true">→</span></Link></div>}
@@ -224,7 +284,7 @@ function GenerateContent() {
               </div>
               <button
                 onClick={handleGenerate}
-                disabled={!jdText.trim() || profileBlocking.length > 0}
+                disabled={!jdText.trim() || profileBlocking.length > 0 || recovering || Boolean(activeJobId)}
                 className="primary-button min-h-11 px-8 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <BirchIcon name="leaf" size={18} />
@@ -240,7 +300,8 @@ function GenerateContent() {
         {(step === "parsing" || step === "bullets" || step === "generating") && (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="mb-6 flex size-12 animate-pulse items-center justify-center rounded-[6px] bg-[#E1EAE5]"><BirchIcon name="growth-ring" size={28} /></div>
-            <p className="text-lg font-medium text-[#52645C]">{statusMsg}</p>
+            <p role="status" className="text-lg font-medium text-[#52645C]">{statusMsg}</p>
+            {activeJobId && <p className="mt-4 text-sm text-[#64736C]">{text("进度已保存。请保持此页打开以完成生成；关闭后重新打开会继续未完成的步骤。", "Progress is saved. Keep this page open to finish; reopening it resumes any remaining steps.")}</p>}
             {jdAnalysis && (
               <p className="text-sm text-[#64736C] mt-2">
                 {(jdAnalysis as Record<string, string>).job_title} @ {(jdAnalysis as Record<string, string>).company}

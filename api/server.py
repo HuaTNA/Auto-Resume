@@ -204,7 +204,7 @@ def _profile_completeness(profile: dict) -> dict:
 
 def _add_history_db(user: User, db: Session, jd_analysis: dict, ats_scores: dict = None,
                     output_files: list = None, template: str = None,
-                    resume_tex: str = None, cover_letter: str = None) -> dict:
+                    resume_tex: str = None, cover_letter: str = None, *, commit: bool = True) -> dict:
     """Insert a history record for the given user. Returns the record dict."""
     record = HistoryRecord(
         user_id=user.id,
@@ -226,13 +226,15 @@ def _add_history_db(user: User, db: Session, jd_analysis: dict, ats_scores: dict
         status="generated",
     )
     db.add(record)
-    db.commit()
+    db.flush()
+    _ensure_career_application_db(user, db, record, commit=False)
+    if commit:
+        db.commit()
     db.refresh(record)
-    _ensure_career_application_db(user, db, record)
     return record.to_dict()
 
 
-def _ensure_career_application_db(user: User, db: Session, record: HistoryRecord) -> CareerApplication:
+def _ensure_career_application_db(user: User, db: Session, record: HistoryRecord, *, commit: bool = True) -> CareerApplication:
     """Mirror a legacy history record into normalized Career tables."""
     application = db.query(CareerApplication).filter(
         CareerApplication.user_id == user.id,
@@ -242,7 +244,8 @@ def _ensure_career_application_db(user: User, db: Session, record: HistoryRecord
         if application.status != record.status:
             application.status = record.status
             application.updated_at = datetime.utcnow()
-            db.commit()
+            if commit:
+                db.commit()
         return application
 
     job = db.query(CareerJob).filter(
@@ -270,7 +273,9 @@ def _ensure_career_application_db(user: User, db: Session, record: HistoryRecord
         status=record.status,
     )
     db.add(application)
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     db.refresh(application)
     return application
 
@@ -787,13 +792,14 @@ def api_generate_full(
 
 
 def _generation_job_dict(job: GenerationJob, *, include_result: bool = True) -> dict:
-    result = json.loads(job.result_json or "{}") if include_result and job.result_json else None
+    result = json.loads(job.result_json or "{}") if include_result and job.status == "completed" and job.result_json else None
     return {
         "id": job.public_id,
         "status": job.status,
         "step": job.step,
         "progress": job.progress,
         "record_id": job.history_record_id,
+        "stalled": job.status == "running" and job.updated_at < datetime.utcnow() - timedelta(seconds=360),
         "result": result,
         "error": job.error,
         "created_at": job.created_at.isoformat(),
@@ -803,68 +809,119 @@ def _generation_job_dict(job: GenerationJob, *, include_result: bool = True) -> 
 
 
 def _execute_generation_job(job_id: int) -> None:
+    """Execute one checkpointed stage per invocation, below the serverless deadline."""
     db = SessionLocal()
     try:
-        claimed = db.query(GenerationJob).filter(
-            GenerationJob.id == job_id,
-            GenerationJob.status == "queued",
-        ).update({
-            GenerationJob.status: "running",
-            GenerationJob.step: "generating",
-            GenerationJob.progress: 10,
-            GenerationJob.started_at: datetime.utcnow(),
+        claimed = db.query(GenerationJob).filter(GenerationJob.id == job_id, GenerationJob.status == "queued").update({
+            GenerationJob.status: "running", GenerationJob.started_at: datetime.utcnow(),
             GenerationJob.updated_at: datetime.utcnow(),
         })
         db.commit()
         if claimed != 1:
             return
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        user = db.query(User).filter(User.id == job.user_id).first()
-        if not user:
-            raise RuntimeError("Generation job user no longer exists")
-        request_data = JDInput(**json.loads(job.request_json))
-        result = api_generate_full(request_data, user, db)
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        job.status = "completed"
-        job.step = "completed"
-        job.progress = 100
-        job.result_json = json.dumps(result, ensure_ascii=False)
-        job.history_record_id = result["record_id"]
-        job.finished_at = datetime.utcnow()
+        job = db.query(GenerationJob).filter_by(id=job_id).one()
+        user = db.query(User).filter_by(id=job.user_id).one()
+        data = JDInput(**json.loads(job.request_json))
+        checkpoint = json.loads(job.result_json or "{}")
+        stage = checkpoint.get("next_stage", "parse")
+        job.step = stage
+        db.commit()
+        # JSON parsing can retry once; each provider request has a bounded timeout.
+        client = get_client().with_options(timeout=90.0, max_retries=0) if stage != "save" else None
+        if stage == "parse":
+            if not checkpoint.get("quota_reserved"):
+                enforce_external_api_limit(db, user, units=8)
+                checkpoint["quota_reserved"] = True
+                checkpoint["profile"] = _load_profile_db(user, db)
+                job.result_json = json.dumps(checkpoint, ensure_ascii=False)
+                db.commit()
+            checkpoint["jd_analysis"] = parse_jd(clean_jd(data.jd_text), client)
+            next_stage, progress = "retrieve", 15
+        elif stage == "retrieve":
+            checkpoint["filtered_profile"] = retrieve_relevant_content(checkpoint["profile"], checkpoint["jd_analysis"], client, top_k=data.top_k)
+            next_stage, progress = "resume", 25
+        elif stage == "resume":
+            checkpoint["resume_tex"] = generate_resume(checkpoint["filtered_profile"], checkpoint["jd_analysis"], client, template_name=data.template)
+            next_stage, progress = "score", 40
+        elif stage == "score":
+            result = score_resume(checkpoint["resume_tex"], checkpoint["jd_analysis"], client)
+            checkpoint["ats_result"] = result
+            rounds = checkpoint.setdefault("optimization_rounds", [])
+            sem, kw = result["semantic"], result["keyword_match"]
+            rounds.append({"round": len(rounds) + 1, "overall": sem["overall_score"], "keyword_pct": kw["score"], "relevance": sem["relevance_score"], "impact": sem["impact_score"]})
+            passed = sem["overall_score"] >= 80 and kw["score"] >= 60 and sem["relevance_score"] >= 80 and sem["impact_score"] >= 80
+            next_stage = ("cover" if data.generate_cover_letter else "save") if passed or len(rounds) >= 3 else "refine"
+            progress = min(85, 45 + len(rounds) * 10)
+        elif stage == "refine":
+            checkpoint["resume_tex"] = refine_resume(checkpoint["resume_tex"], checkpoint["ats_result"], checkpoint["jd_analysis"], checkpoint["filtered_profile"], client)
+            next_stage, progress = "score", job.progress
+        elif stage == "cover":
+            checkpoint["cover_letter"] = generate_cover_letter(checkpoint["filtered_profile"], checkpoint["jd_analysis"], client)
+            next_stage, progress = "save", 95
+        elif stage == "save":
+            # Store artifacts in the database, atomically with completion. Downloads
+            # already render from history content; ephemeral server files are unnecessary.
+            record = _add_history_db(user, db, jd_analysis=checkpoint["jd_analysis"], ats_scores=checkpoint["ats_result"],
+                                     template=data.template, resume_tex=checkpoint["resume_tex"],
+                                     cover_letter=checkpoint.get("cover_letter", ""), commit=False)
+            result = {key: checkpoint.get(key) for key in ("jd_analysis", "filtered_profile", "resume_tex", "cover_letter", "ats_result", "optimization_rounds")}
+            result.update({"record_id": record["id"], "files": []})
+            job.history_record_id = record["id"]
+            job.result_json = json.dumps(result, ensure_ascii=False)
+            job.status = job.step = "completed"
+            job.progress = 100
+            job.finished_at = job.updated_at = datetime.utcnow()
+            db.commit()
+            return
+        else:
+            raise RuntimeError("Unknown generation checkpoint")
+        checkpoint["next_stage"] = next_stage
+        checkpoint["interruptions"] = 0
+        job.result_json = json.dumps(checkpoint, ensure_ascii=False)
+        job.status = "queued"
+        job.step = next_stage
+        job.progress = progress
         job.updated_at = datetime.utcnow()
         db.commit()
     except Exception as exc:
         db.rollback()
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        job = db.query(GenerationJob).filter_by(id=job_id).first()
         if job:
-            job.status = "failed"
-            job.step = "failed"
-            job.error = f"{type(exc).__name__}: {exc}"[:2000]
-            job.finished_at = datetime.utcnow()
-            job.updated_at = datetime.utcnow()
+            job.status = job.step = "failed"
+            job.error = f"{type(exc).__name__}: Generation stage failed. Please retry generation."[:2000]
+            job.finished_at = job.updated_at = datetime.utcnow()
             db.commit()
     finally:
         db.close()
 
 
 def _resume_generation_jobs() -> None:
-    db = SessionLocal()
-    try:
-        stale_before = datetime.utcnow() - timedelta(hours=1)
-        db.query(GenerationJob).filter(
-            GenerationJob.status == "running",
-            GenerationJob.updated_at < stale_before,
-        ).update({
-            GenerationJob.status: "queued",
-            GenerationJob.step: "queued",
-            GenerationJob.progress: 0,
-        })
+    # The browser advances saved stages with separate requests. Startup threads
+    # have no guaranteed lifetime on serverless hosts and must not replay jobs.
+    return
+
+
+@app.post("/api/generation-jobs/{public_id}/advance", status_code=202)
+def advance_generation_job(public_id: str, background_tasks: BackgroundTasks,
+                           current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    job = db.query(GenerationJob).filter_by(user_id=current_user.id, public_id=public_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    if job.status == "running" and job.updated_at < datetime.utcnow() - timedelta(seconds=360):
+        checkpoint = json.loads(job.result_json or "{}")
+        checkpoint["interruptions"] = checkpoint.get("interruptions", 0) + 1
+        changes = {GenerationJob.status: "queued" if checkpoint["interruptions"] <= 2 else "failed",
+                   GenerationJob.result_json: json.dumps(checkpoint), GenerationJob.updated_at: datetime.utcnow()}
+        if checkpoint["interruptions"] > 2:
+            changes[GenerationJob.error] = "Generation repeatedly interrupted by the host. Please retry later."
+        db.query(GenerationJob).filter_by(id=job.id, status="running").filter(
+            GenerationJob.updated_at < datetime.utcnow() - timedelta(seconds=360),
+        ).update(changes)
         db.commit()
-        ids = [row.id for row in db.query(GenerationJob).filter(GenerationJob.status == "queued").limit(20).all()]
-    finally:
-        db.close()
-    for job_id in ids:
-        threading.Thread(target=_execute_generation_job, args=(job_id,), name=f"generation-{job_id}", daemon=True).start()
+        db.refresh(job)
+    if job.status == "queued":
+        background_tasks.add_task(_execute_generation_job, job.id)
+    return {"job": _generation_job_dict(job)}
 
 
 @app.post("/api/generation-jobs", status_code=202)
@@ -902,6 +959,15 @@ def create_generation_job(
     db.refresh(job)
     background_tasks.add_task(_execute_generation_job, job.id)
     return {"job": _generation_job_dict(job)}
+
+
+@app.get("/api/generation-jobs")
+def get_active_generation_job(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    job = db.query(GenerationJob).filter(
+        GenerationJob.user_id == current_user.id,
+        GenerationJob.status.in_(["queued", "running"]),
+    ).order_by(GenerationJob.created_at.desc(), GenerationJob.id.desc()).first()
+    return {"job": _generation_job_dict(job) if job else None}
 
 
 @app.get("/api/generation-jobs/{public_id}")

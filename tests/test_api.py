@@ -1,14 +1,15 @@
 import os
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+from contextlib import ExitStack
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from api.database import Base, CareerApplication, CareerJob, HistoryRecord, get_db
+from api.database import Base, CareerApplication, CareerJob, GenerationJob, HistoryRecord, get_db
 from api.server import app
 
 
@@ -95,6 +96,70 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(second.status_code, 202, second.text)
         self.assertEqual(first.json()["job"]["id"], second.json()["job"]["id"])
         self.assertEqual(changed.status_code, 409)
+
+    def test_generation_recovery_is_scoped_and_reports_stalled_jobs(self):
+        with self.Session() as session:
+            session.add(GenerationJob(public_id="stalled-job", user_id=self._user_id("a@example.com"),
+                                      idempotency_key="stalled", status="running",
+                                      updated_at=datetime.utcnow() - timedelta(minutes=20)))
+            session.commit()
+        own = self.client_a.get("/api/generation-jobs").json()["job"]
+        self.assertEqual(own["id"], "stalled-job")
+        self.assertTrue(own["stalled"])
+        self.assertEqual(own["status"], "running")
+        self.assertIsNone(self.client_b.get("/api/generation-jobs").json()["job"])
+        self.assertEqual(self.client_b.get("/api/generation-jobs/stalled-job").status_code, 404)
+        with self.Session() as session:
+            job = session.query(GenerationJob).filter_by(public_id="stalled-job").one()
+            job.status = "completed"
+            job.result_json = '{"record_id": 123}'
+            session.commit()
+        self.assertIsNone(self.client_a.get("/api/generation-jobs").json()["job"])
+        finished = self.client_a.get("/api/generation-jobs/stalled-job").json()["job"]
+        self.assertFalse(finished["stalled"])
+        self.assertEqual(finished["result"]["record_id"], 123)
+
+    def test_generation_advances_one_saved_stage_and_finalizes_once(self):
+        profile = {"experiences": [{"id": "exp-1", "bullets": [{"id": "b-1", "text": "Built a service"}]}]}
+        self.client_a.put("/api/profile", json=profile)
+        score = {"keyword_match": {"score": 90}, "semantic": {"overall_score": 90, "relevance_score": 90, "impact_score": 90}}
+        with ExitStack() as stack:
+            stack.enter_context(patch("api.server.SessionLocal", self.Session))
+            stack.enter_context(patch("api.server.get_client", return_value=MagicMock()))
+            quota = stack.enter_context(patch("api.server.enforce_external_api_limit"))
+            parse = stack.enter_context(patch("api.server.parse_jd", return_value={"job_title": "Engineer", "company": "Example"}))
+            retrieve = stack.enter_context(patch("api.server.retrieve_relevant_content", return_value=profile))
+            generate = stack.enter_context(patch("api.server.generate_resume", return_value="resume content"))
+            stack.enter_context(patch("api.server.score_resume", return_value=score))
+            stack.enter_context(patch("api.server.generate_cover_letter", return_value="cover content"))
+            response = self.client_a.post("/api/generation-jobs", json={"jd_text": "A" * 80}, headers={"Idempotency-Key": "stages"})
+            job_id = response.json()["job"]["id"]
+            saved = self.client_a.get(f"/api/generation-jobs/{job_id}").json()["job"]
+            self.assertEqual(saved["step"], "retrieve")
+            self.assertIsNone(saved["result"])
+            self.assertEqual(parse.call_count, 1)
+            self.assertEqual(retrieve.call_count, 0)
+            # Simulate a platform kill after the parse checkpoint was saved.
+            with self.Session() as session:
+                job = session.query(GenerationJob).filter_by(public_id=job_id).one()
+                job.status = "running"
+                job.updated_at = datetime.utcnow() - timedelta(minutes=7)
+                session.commit()
+            self.client_a.post(f"/api/generation-jobs/{job_id}/advance")
+            self.assertEqual(parse.call_count, 1)
+            self.assertEqual(retrieve.call_count, 1)
+            self.assertEqual(generate.call_count, 0)
+            for stage in ("score", "cover", "save", "completed"):
+                self.client_a.post(f"/api/generation-jobs/{job_id}/advance")
+                saved = self.client_a.get(f"/api/generation-jobs/{job_id}").json()["job"]
+                self.assertEqual(saved["step"], stage)
+            self.assertEqual(saved["result"]["resume_tex"], "resume content")
+            self.assertEqual(saved["result"]["cover_letter"], "cover content")
+            self.assertEqual(quota.call_count, 1)
+            self.client_a.post(f"/api/generation-jobs/{job_id}/advance")
+            with self.Session() as session:
+                self.assertEqual(session.query(HistoryRecord).count(), 1)
+            self.assertEqual(self.client_b.post(f"/api/generation-jobs/{job_id}/advance").status_code, 404)
 
     def test_pdf_endpoint_cannot_read_another_users_record(self):
         session = self.Session()

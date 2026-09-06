@@ -40,8 +40,16 @@ export async function createGenerationJob(jdText: string, template: string, gene
   });
 }
 
+export async function getActiveGenerationJob() {
+  return fetchAPI("/api/generation-jobs");
+}
+
+export async function advanceGenerationJob(jobId: string) {
+  return fetchAPI(`/api/generation-jobs/${encodeURIComponent(jobId)}/advance`, { method: "POST" });
+}
+
 export async function getGenerationJob(jobId: string) {
-  return fetchAPI(`/api/generation-jobs/${jobId}`);
+  return fetchAPI(`/api/generation-jobs/${encodeURIComponent(jobId)}`);
 }
 
 export async function updateProfile(profile: object) {
